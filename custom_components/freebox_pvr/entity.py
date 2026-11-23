@@ -43,6 +43,8 @@ def record_to_attr(rec: dict[str, Any]) -> dict[str, Any]:
         "channel_uuid": rec.get("channel_uuid"),
         "start": _iso(rec.get("start")),
         "end": _iso(rec.get("end")),
+        "start_ts": rec.get("start"),
+        "end_ts": rec.get("end"),
         "state": rec.get("state"),
         "error": rec.get("error"),
         "conflict": bool(rec.get("conflict")),

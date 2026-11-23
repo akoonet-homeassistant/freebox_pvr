@@ -8,9 +8,11 @@ from typing import Any
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
-from .const import ACTIVE_STATES
+from .api import ChannelNotFound, find_channel, parse_aliases
+from .const import ACTIVE_STATES, CONF_CHANNEL_ALIASES, GUIDE_DOMAIN
 from .entity import FreeboxPvrEntity, record_to_attr
 
 
@@ -42,7 +44,27 @@ class ScheduledRecordsSensor(FreeboxPvrEntity, SensorEntity):
             "records": [record_to_attr(r) for r in _upcoming(records)],
             "conflicts": sum(1 for r in _upcoming(records) if r.get("conflict")),
             "failed": [record_to_attr(r) for r in records if r.get("state") in {"failed", "start_error", "running_error"}][-5:],
+            "guide_channels": self._guide_channels(),
         }
+
+    def _guide_channels(self) -> dict[str, str | None]:
+        """Chaîne du guide Programme TNT FR → identifiant Freebox (utilisé par la carte)."""
+        channels = self.coordinator.data.channels
+        aliases = parse_aliases(self.coordinator.config_entry.options.get(CONF_CHANNEL_ALIASES))
+        result: dict[str, str | None] = {}
+        registry = er.async_get(self.hass)
+        for entry in registry.entities.values():
+            if entry.platform != GUIDE_DOMAIN or entry.domain != "sensor":
+                continue
+            state = self.hass.states.get(entry.entity_id)
+            name = state.attributes.get("channel_name") if state else None
+            if not name or name in result:
+                continue
+            try:
+                result[name] = find_channel(channels, name, aliases)["uuid"]
+            except ChannelNotFound:
+                result[name] = None
+        return result
 
 
 class NextRecordSensor(FreeboxPvrEntity, SensorEntity):

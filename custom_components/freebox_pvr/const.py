@@ -6,7 +6,7 @@ from datetime import timedelta
 import socket
 
 DOMAIN = "freebox_pvr"
-VERSION = "2026.11.1"
+VERSION = "2026.11.2"
 
 APP_DESC: dict[str, str] = {
     "app_id": "fr.akoonet.freebox_pvr",
@@ -33,6 +33,8 @@ SCAN_INTERVAL = timedelta(minutes=5)
 CHANNELS_REFRESH = timedelta(hours=6)
 
 # Créneaux exposés par les capteurs de l'intégration « Programme TNT FR »
+GUIDE_DOMAIN = "programme_tnt_fr"
+STATIC_URL = "/freebox_pvr_static"
 SLOTS = ["current", "next", "prime_time", "second_part"]
 
 # États d'un enregistrement programmé (API Freebox OS)

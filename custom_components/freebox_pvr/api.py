@@ -159,13 +159,26 @@ class RecordRequest:
 
 
 def find_record_for_program(
-    records: list[dict[str, Any]], channel_uuid: str, program_start: int
+    records: list[dict[str, Any]],
+    channel_uuid: str,
+    program_start: int,
+    program_end: int | None = None,
 ) -> dict[str, Any] | None:
-    """Enregistrement programmé qui couvre le début de ce programme sur cette chaîne."""
+    """Enregistrement programmé correspondant à ce programme sur cette chaîne.
+
+    Avec la fin du programme : l'enregistrement doit en couvrir au moins la moitié
+    (évite de confondre avec le programme suivant, couvert seulement par la marge).
+    Sans la fin : l'enregistrement doit couvrir le début du programme.
+    """
     for rec in records:
         if rec.get("channel_uuid") != channel_uuid:
             continue
-        if rec.get("start", 0) <= program_start + 60 and rec.get("end", 0) > program_start:
+        r_start, r_end = rec.get("start", 0), rec.get("end", 0)
+        if program_end and program_end > program_start:
+            overlap = min(r_end, program_end) - max(r_start, program_start)
+            if overlap * 2 >= program_end - program_start:
+                return rec
+        elif r_start <= program_start + 60 and r_end > program_start:
             return rec
     return None
 

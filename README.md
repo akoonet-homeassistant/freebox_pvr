@@ -8,6 +8,8 @@
 [![License](https://img.shields.io/github/license/akoonet-homeassistant/freebox_pvr)](LICENSE)
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 
+![Freebox PVR](docs/screenshots/ce_soir.png)
+
 ## Français
 
 Freebox PVR programme des **enregistrements TV sur votre Freebox** (Revolution, Mini 4K, Delta, Pop, Ultra) depuis Home Assistant. Il s'appuie sur le guide [Programme TNT FR](https://github.com/cyclope205/programme-tnt-fr) : vous choisissez une chaîne et un programme, Freebox PVR retrouve la chaîne côté Freebox et programme l'enregistrement sur le disque du Freebox Server.
@@ -24,6 +26,8 @@ Freebox PVR programme des **enregistrements TV sur votre Freebox** (Revolution, 
 - **Programme déjà commencé** : l'enregistrement démarre tout de suite.
 - **Annulation** d'un enregistrement, par identifiant ou par programme.
 - **Entités** : enregistrements programmés (avec leur liste), prochain enregistrement, enregistrement en cours.
+- **Bouton dans la carte Programme TNT FR** : la fiche de chaque programme (carrousels, Guide TV, Top films) propose « ⏺ Enregistrer sur la Freebox », ou indique que le programme est déjà enregistré avec un bouton pour l'annuler. Rien à configurer.
+- **Carte du tableau de bord** « Freebox PVR » : le programme TV (maintenant, ce soir) avec un bouton d'enregistrement sur chaque programme, et la liste des enregistrements. Aucune ressource à ajouter.
 - **Interface en français et en anglais**, selon la langue de l'utilisateur.
 
 ### Installation
@@ -95,6 +99,48 @@ data:
   margin_after: 15
 ```
 
+### Dans la carte Programme TNT FR
+
+Si la carte [Programme TNT FR](https://github.com/cyclope205/programme-tnt-fr) est sur votre tableau de bord, ouvrez la fiche d'un programme (appui sur une affiche, une ligne du Guide TV ou du Top films) : une ligne Freebox PVR s'ajoute sous les rappels.
+
+- **⏺ Enregistrer sur la Freebox** : programme l'enregistrement, avec les marges des options. Fonctionne aussi pour les jours suivants dans le Guide TV, et pour un programme déjà commencé (l'enregistrement démarre tout de suite).
+- **Enregistrement programmé** : le programme est déjà enregistré (depuis Home Assistant, le Player ou Freebox OS). **Annuler l'enregistrement** puis **Confirmer l'annulation** le supprime.
+- **Chaîne introuvable sur la Freebox** : ajoutez une correspondance dans les options de l'intégration.
+
+La carte Programme TNT FR n'est pas modifiée : Freebox PVR complète sa fiche au moment où elle s'ouvre. Si une future version de cette carte change son fonctionnement interne, la ligne n'apparaît simplement plus (message dans la console du navigateur) et la carte fonctionne comme avant.
+
+### Carte du tableau de bord
+
+Modifier le tableau de bord → **Ajouter une carte** → **Freebox PVR**. Tout se règle dans l'éditeur visuel ; en YAML :
+
+```yaml
+type: custom:freebox-pvr-card
+title: Programme TV          # facultatif
+onglet: soir                 # maintenant | soir | enregistrements
+chaines:                     # facultatif : vide = toutes les chaînes du guide, sinon dans cet ordre
+  - sensor.programme_tnt_fr_tf1
+  - sensor.programme_tnt_fr_france_2
+  - sensor.programme_tnt_fr_m6
+afficher_affiches: true      # affiche dans le détail d'un programme
+```
+
+- **Maintenant** : programme en cours (avec sa progression) et suivant. **Ce soir** : première et deuxième partie de soirée. **Enregistrements** : la liste de la Freebox, avec leur état et les conflits.
+- **Bouton ⏺** : un appui programme l'enregistrement. Le programme passe en rouge quand il est enregistré (la Freebox fait foi). Un nouvel appui propose « Annuler ? » pendant 4 secondes ; un 2e appui annule.
+- Bouton grisé : la chaîne n'a pas été trouvée sur la Freebox ; ajoutez une correspondance dans les options de l'intégration.
+- Un appui sur un programme affiche son résumé, sa note et son affiche.
+
+### Captures d'écran
+
+| | |
+|---|---|
+| **Ce soir** — deux programmes enregistrés, une chaîne introuvable<br>![Ce soir](docs/screenshots/ce_soir.png) | **Maintenant** — progression et détail d'un programme<br>![Maintenant](docs/screenshots/maintenant.png) |
+| **Enregistrements** — en cours et prévus<br>![Enregistrements](docs/screenshots/enregistrements.png) | **Annulation** — confirmation en un appui<br>![Annulation](docs/screenshots/annulation.png) |
+| **Thème sombre**<br>![Sombre](docs/screenshots/sombre.png) | **En anglais**<br>![English](docs/screenshots/english.png) |
+| **Fiche Programme TNT FR** — enregistrer<br>![Fiche](docs/screenshots/fiche_enregistrer.png) | **Fiche Programme TNT FR** — déjà enregistré<br>![Fiche enregistrée](docs/screenshots/fiche_enregistre.png) |
+| **Fiche Programme TNT FR** — confirmation d'annulation<br>![Annuler](docs/screenshots/fiche_annuler.png) | **Fiche Programme TNT FR** — thème sombre<br>![Fiche sombre](docs/screenshots/fiche_enregistrer_sombre.png) |
+
+*Captures réalisées sur une installation de démonstration : chaînes et programmes fictifs.*
+
 ### Entités
 
 | Entité | Rôle |
@@ -115,6 +161,7 @@ Les identifiants exacts dépendent de la langue de Home Assistant au moment de l
 
 ### Sécurité
 
+- La carte et la surcouche n'appellent que les services `freebox_pvr.record` et `freebox_pvr.cancel` ; les textes du guide sont affichés sans être interprétés (pas d'injection HTML) et seules les images en `http(s)` sont chargées.
 - Le jeton d'application est stocké dans `.storage/freebox_pvr/`, comme pour l'intégration Freebox officielle. Il est supprimé quand l'intégration est retirée ; révoquez aussi l'application dans Freebox OS.
 - Les échanges se font en HTTPS avec vérification du certificat (certificats système et autorité Freebox).
 - Seul le droit sur les enregistrements TV (PVR) est nécessaire : vous pouvez retirer à l'application les autres droits accordés par défaut.
@@ -144,6 +191,8 @@ Freebox PVR schedules **TV recordings on your Freebox** (Revolution, Mini 4K, De
 - **Program already started**: recording starts right away.
 - **Cancel** a recording, by ID or by program.
 - **Entities**: scheduled recordings (with their list), next recording, recording in progress.
+- **Button in the Programme TNT FR card**: each program sheet (carousels, TV guide, top films) offers "⏺ Record on the Freebox", or shows that the program is already recorded with a button to cancel it. Nothing to set up.
+- **"Freebox PVR" dashboard card**: the TV guide (now, tonight) with a record button on each program, and the list of recordings. No resource to add.
 - **French and English interface**, following the user's language.
 
 ### Installation
@@ -215,6 +264,40 @@ data:
   margin_after: 15
 ```
 
+### In the Programme TNT FR card
+
+If the [Programme TNT FR](https://github.com/cyclope205/programme-tnt-fr) card is on your dashboard, open a program sheet (tap a poster, a TV guide or top films row): a Freebox PVR line is added below the reminders.
+
+- **⏺ Record on the Freebox**: schedules the recording, with the option margins. Also works for the next days in the TV guide, and for a program already started (recording starts right away).
+- **Recording scheduled**: the program is already recorded (from Home Assistant, the Player or Freebox OS). **Cancel the recording** then **Confirm cancellation** deletes it.
+- **Channel not found on the Freebox**: add a match in the integration options.
+
+The Programme TNT FR card is not modified: Freebox PVR completes its sheet when it opens. If a future version of that card changes how it works internally, the line simply no longer appears (message in the browser console) and the card works as before.
+
+### Dashboard card
+
+Edit dashboard → **Add card** → **Freebox PVR**. Everything is set in the visual editor; in YAML:
+
+```yaml
+type: custom:freebox-pvr-card
+title: TV guide              # optional
+onglet: soir                 # maintenant (now) | soir (tonight) | enregistrements (recordings)
+chaines:                     # optional: empty = all guide channels, otherwise in this order
+  - sensor.programme_tnt_fr_tf1
+  - sensor.programme_tnt_fr_france_2
+  - sensor.programme_tnt_fr_m6
+afficher_affiches: true      # poster in the program details
+```
+
+- **Now**: current program (with progress) and next. **Tonight**: prime time and second part. **Recordings**: the Freebox list, with state and conflicts.
+- **⏺ button**: one tap schedules the recording. The program turns red once recorded (the Freebox is the reference). Another tap shows "Cancel?" for 4 seconds; a second tap cancels.
+- Greyed button: the channel was not found on the Freebox; add a match in the integration options.
+- Tapping a program shows its summary, rating and poster.
+
+### Screenshots
+
+See the [French section](#captures-décran) (demo installation, fictitious channels and programs).
+
 ### Entities
 
 | Entity | Purpose |
@@ -235,6 +318,7 @@ Exact entity IDs depend on the Home Assistant language at installation time.
 
 ### Security
 
+- The card and the overlay only call the `freebox_pvr.record` and `freebox_pvr.cancel` services; guide texts are displayed without being interpreted (no HTML injection) and only `http(s)` images are loaded.
 - The app token is stored in `.storage/freebox_pvr/`, like the official Freebox integration. It is deleted when the integration is removed; also revoke the app in Freebox OS.
 - Traffic uses HTTPS with certificate verification (system certificates and Freebox authority).
 - Only the TV recording (PVR) permission is needed: you can remove the other permissions granted by default.

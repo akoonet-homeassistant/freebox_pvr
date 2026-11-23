@@ -9,6 +9,8 @@ from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.components.frontend import add_extra_js_url
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import ATTR_ENTITY_ID, CONF_HOST, CONF_PORT, Platform
 from homeassistant.core import (
@@ -59,6 +61,8 @@ from .const import (
     SERVICE_RECORD,
     SERVICE_REFRESH_CHANNELS,
     SLOTS,
+    STATIC_URL,
+    VERSION,
 )
 from .coordinator import FreeboxPvrCoordinator
 
@@ -134,7 +138,11 @@ def to_timestamp(value: Any) -> int | None:
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Enregistre les actions (services) de l'intégration."""
+    """Enregistre les actions (services) et la carte du tableau de bord."""
+    # Carte « Freebox PVR » : chargée sur toutes les pages, sans ressource Lovelace à ajouter
+    frontend_dir = Path(__file__).parent / "frontend"
+    await hass.http.async_register_static_paths([StaticPathConfig(STATIC_URL, str(frontend_dir), True)])
+    add_extra_js_url(hass, f"{STATIC_URL}/freebox-pvr-card.js?v={VERSION}")
 
     def _coordinator(call: ServiceCall) -> FreeboxPvrCoordinator:
         entry_id = call.data.get("config_entry_id")
@@ -227,7 +235,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         uuid = channel["uuid"]
 
         records = coordinator.data.records if coordinator.data else []
-        existing = find_record_for_program(records, uuid, max(start, now))
+        existing = find_record_for_program(records, uuid, start, end)
         if existing:
             return {"record_id": existing.get("id"), "already_programmed": True, "channel_uuid": uuid}
 
@@ -271,11 +279,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 data[ATTR_CHANNEL_NAME] = call.data[ATTR_CHANNEL_NAME]
             if call.data.get(ATTR_START):
                 data[ATTR_START] = call.data[ATTR_START]
+                data.pop(ATTR_END, None)
             start = to_timestamp(data.get(ATTR_START))
+            end = to_timestamp(data.get(ATTR_END))
             if start is None or not (data.get(ATTR_CHANNEL_NAME) or call.data.get(ATTR_CHANNEL_UUID)):
                 raise ServiceValidationError(translation_domain=DOMAIN, translation_key="missing_fields")
             channel = _resolve_channel(coordinator, data.get(ATTR_CHANNEL_NAME), call.data.get(ATTR_CHANNEL_UUID))
-            rec = find_record_for_program(coordinator.data.records, channel["uuid"], start)
+            rec = find_record_for_program(coordinator.data.records, channel["uuid"], start, end)
             if rec is None:
                 raise ServiceValidationError(translation_domain=DOMAIN, translation_key="record_not_found")
             record_id = rec["id"]
