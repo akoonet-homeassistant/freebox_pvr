@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
+import json
 import logging
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -190,6 +193,32 @@ def find_record_for_program(
     return None
 
 
+def sync_token_file(token_file: Path) -> bool:
+    """Aligne la description stockée avec le jeton sur APP_DESC, sans toucher au jeton.
+
+    freebox_api relance une autorisation sur l'écran du Freebox Server si la
+    description enregistrée diffère de celle envoyée. Le jeton reste valable tant que
+    l'identifiant de l'application est le même : la Freebox ne vérifie que app_id et
+    le jeton. Renvoie True si le fichier a été réécrit.
+    """
+    try:
+        with open(token_file, encoding="utf-8") as f:
+            data = json.load(f)
+    except (FileNotFoundError, ValueError):
+        return False
+    if not isinstance(data, dict) or not data.get("app_token") or data.get("app_id") != APP_DESC["app_id"]:
+        return False
+    if all(data.get(k) == v for k, v in APP_DESC.items()):
+        return False
+    data.update(APP_DESC)
+    tmp = f"{token_file}.tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+    os.replace(tmp, token_file)
+    return True
+
+
 class FreeboxPvrClient:
     """Client minimal autour de freebox_api pour la partie TV / PVR."""
 
@@ -201,6 +230,8 @@ class FreeboxPvrClient:
 
     async def open(self) -> None:
         """Ouvre la session (et enregistre l'application la 1re fois)."""
+        if await asyncio.to_thread(sync_token_file, self.token_file):
+            _LOGGER.debug("Description de l'application mise à jour dans %s (pas de nouvelle autorisation)", self.token_file)
         fbx = Freepybox(app_desc=APP_DESC, token_file=self.token_file, api_version=API_VERSION)
         try:
             await fbx.open(self.host, str(self.port))

@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.3";
+const VERSION_CARTE = "2026.11.4";
 
 const TEXTES = {
   fr: {

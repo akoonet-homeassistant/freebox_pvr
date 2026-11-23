@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from datetime import timedelta
-import socket
 
 DOMAIN = "freebox_pvr"
-VERSION = "2026.11.3"
+VERSION = "2026.11.4"
 
+# Description de l'application envoyée à la Freebox. Elle doit rester FIXE :
+# freebox_api redemande une autorisation sur l'écran du Server dès qu'elle change
+# (ne pas y mettre la version de l'intégration ni le nom de la machine).
 APP_DESC: dict[str, str] = {
     "app_id": "fr.akoonet.freebox_pvr",
     "app_name": "Home Assistant - Freebox PVR",
-    "app_version": VERSION,
-    "device_name": socket.gethostname(),
+    "app_version": "1",
+    "device_name": "Home Assistant",
 }
 API_VERSION = "v6"
 

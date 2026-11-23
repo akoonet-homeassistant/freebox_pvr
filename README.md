@@ -59,6 +59,8 @@ Copiez `custom_components/freebox_pvr` dans le dossier `custom_components` de vo
 3. Dans Freebox OS → *Paramètres de la Freebox → Gestion des accès → Applications*, ouvrez « Home Assistant - Freebox PVR » et donnez le droit sur les **enregistrements TV (PVR)**.
 4. Revenez dans Home Assistant et cliquez de nouveau sur **Valider**.
 
+L'autorisation sur l'écran n'est demandée qu'une fois : les mises à jour de l'intégration ne la redemandent pas (depuis la 2026.11.4).
+
 Le bouton **Configurer** de l'intégration donne accès aux options :
 
 | Option | Par défaut | Rôle |
@@ -251,6 +253,8 @@ Copy `custom_components/freebox_pvr` into the `custom_components` folder of your
 2. Click **Submit**, then within a minute press the **right arrow** on the Freebox Server screen.
 3. In Freebox OS → *Freebox settings → Access management → Applications*, open "Home Assistant - Freebox PVR" and grant the **TV recording (PVR)** permission.
 4. Back in Home Assistant, click **Submit** again.
+
+The on-screen authorization is only requested once: integration updates do not ask for it again (since 2026.11.4).
 
 The integration's **Configure** button opens the options:
 
