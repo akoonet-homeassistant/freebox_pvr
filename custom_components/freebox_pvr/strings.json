@@ -1,0 +1,210 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Freebox address",
+        "description": "Address of your Freebox Server. For the first setup, use the local address (mafreebox.freebox.fr): the app authorization is only possible from the local network.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
+      },
+      "link": {
+        "title": "Authorize on the Freebox Server",
+        "description": "Click Submit, then within a minute press the right arrow on the Freebox Server screen to authorize « Home Assistant - Freebox PVR ».\n\nThen, in Freebox OS > Freebox settings > Access management > Applications, give this app the TV recording (PVR) permission and click Submit again."
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the Freebox. Check the address and port.",
+      "register_failed": "Authorization refused or not confirmed in time on the Freebox Server screen.",
+      "permission_missing": "The app is authorized but lacks the TV recording (PVR) permission. Grant it in Freebox OS then submit again."
+    },
+    "abort": {
+      "already_configured": "This Freebox is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Recording settings",
+        "data": {
+          "margin_before": "Margin before (min)",
+          "margin_after": "Margin after (min)",
+          "quality": "Quality",
+          "channel_aliases": "Channel matches"
+        },
+        "data_description": {
+          "channel_aliases": "One per line: Guide name = Freebox name (or uuid-webtv-…). Only needed if a channel is not found automatically."
+        }
+      }
+    }
+  },
+  "selector": {
+    "slot": {
+      "options": {
+        "current": "Current program",
+        "next": "Next program",
+        "prime_time": "Prime time",
+        "second_part": "Second part of the evening"
+      }
+    },
+    "quality": {
+      "options": {
+        "auto": "Automatic",
+        "hd": "HD",
+        "sd": "SD",
+        "ld": "Low definition"
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "scheduled_records": {
+        "name": "Scheduled recordings"
+      },
+      "next_record": {
+        "name": "Next recording"
+      }
+    },
+    "binary_sensor": {
+      "recording": {
+        "name": "Recording in progress"
+      }
+    }
+  },
+  "services": {
+    "record": {
+      "name": "Record a program",
+      "description": "Schedules a recording on the Freebox, from a TV guide sensor or from a channel, a title and times.",
+      "fields": {
+        "entity_id": {
+          "name": "TV guide sensor",
+          "description": "A sensor of the Programme TNT FR integration (channel, title and times are read from it)."
+        },
+        "slot": {
+          "name": "Program",
+          "description": "Which program of the sensor to use."
+        },
+        "channel_name": {
+          "name": "Channel name",
+          "description": "Channel name as shown in the TV guide (used if no sensor is given)."
+        },
+        "channel_uuid": {
+          "name": "Freebox channel ID",
+          "description": "Freebox channel identifier (uuid-webtv-…), skips name matching."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Recording name."
+        },
+        "subtitle": {
+          "name": "Subtitle",
+          "description": "Episode name (optional)."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Program start time."
+        },
+        "end": {
+          "name": "End",
+          "description": "Program end time."
+        },
+        "margin_before": {
+          "name": "Margin before",
+          "description": "Minutes recorded before the start (overrides the option)."
+        },
+        "margin_after": {
+          "name": "Margin after",
+          "description": "Minutes recorded after the end (overrides the option)."
+        },
+        "quality": {
+          "name": "Quality",
+          "description": "Stream quality."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Only needed if several Freebox are configured."
+        }
+      }
+    },
+    "cancel": {
+      "name": "Cancel a recording",
+      "description": "Deletes a scheduled recording, by its ID or by program.",
+      "fields": {
+        "record_id": {
+          "name": "Record ID",
+          "description": "ID of the scheduled recording (see the sensor attributes)."
+        },
+        "entity_id": {
+          "name": "TV guide sensor",
+          "description": "A sensor of the Programme TNT FR integration (channel, title and times are read from it)."
+        },
+        "slot": {
+          "name": "Program",
+          "description": "Which program of the sensor to use."
+        },
+        "channel_name": {
+          "name": "Channel name",
+          "description": "Channel name as shown in the TV guide (used if no sensor is given)."
+        },
+        "channel_uuid": {
+          "name": "Freebox channel ID",
+          "description": "Freebox channel identifier (uuid-webtv-…), skips name matching."
+        },
+        "start": {
+          "name": "Start",
+          "description": "Program start time."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Only needed if several Freebox are configured."
+        }
+      }
+    },
+    "refresh_channels": {
+      "name": "Refresh channels",
+      "description": "Reloads the Freebox channel list.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Only needed if several Freebox are configured."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "not_loaded": {
+      "message": "No Freebox PVR is loaded."
+    },
+    "entity_not_found": {
+      "message": "Entity {entity_id} not found."
+    },
+    "no_program": {
+      "message": "No program « {slot} » on {entity_id}."
+    },
+    "channel_not_found": {
+      "message": "Channel « {channel} » not found on the Freebox. Add a match in the integration options."
+    },
+    "invalid_datetime": {
+      "message": "Invalid date: {value}"
+    },
+    "missing_fields": {
+      "message": "Give a TV guide sensor, or a channel, a title, a start and an end."
+    },
+    "end_before_start": {
+      "message": "The end must be after the start."
+    },
+    "already_finished": {
+      "message": "This program is already over."
+    },
+    "record_not_found": {
+      "message": "No scheduled recording found for this program."
+    },
+    "permission_missing": {
+      "message": "The app lacks the TV recording (PVR) permission in Freebox OS."
+    },
+    "api_error": {
+      "message": "Freebox error: {error}"
+    }
+  }
+}
