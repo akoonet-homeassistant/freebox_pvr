@@ -12,7 +12,15 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .api import ChannelNotFound, find_channel, parse_aliases
-from .const import ACTIVE_STATES, CONF_CHANNEL_ALIASES, GUIDE_DOMAIN
+from .const import (
+    ACTIVE_STATES,
+    CONF_CHANNEL_ALIASES,
+    CONF_MARGIN_AFTER,
+    CONF_MARGIN_BEFORE,
+    DEFAULT_MARGIN_AFTER,
+    DEFAULT_MARGIN_BEFORE,
+    GUIDE_DOMAIN,
+)
 from .entity import FreeboxPvrEntity, record_to_attr
 
 
@@ -66,6 +74,11 @@ class ScheduledRecordsSensor(FreeboxPvrEntity, SensorEntity):
             "conflicts": sum(1 for r in _upcoming(records) if r.get("conflict")),
             "failed": [record_to_attr(r) for r in records if r.get("state") in {"failed", "start_error", "running_error"}][-5:],
             "guide_channels": self._guide_channels(),
+            # Marges par défaut (options de l'intégration), proposées dans la fiche d'enregistrement
+            "margins": {
+                "before": int(self.coordinator.config_entry.options.get(CONF_MARGIN_BEFORE, DEFAULT_MARGIN_BEFORE)),
+                "after": int(self.coordinator.config_entry.options.get(CONF_MARGIN_AFTER, DEFAULT_MARGIN_AFTER)),
+            },
         }
 
     def _guide_channels(self) -> dict[str, str | None]:

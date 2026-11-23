@@ -27,7 +27,7 @@ Freebox PVR programme des **enregistrements TV sur votre Freebox** depuis Home A
 - **Enregistrer depuis le guide** : le programme en cours, le suivant, la première ou la deuxième partie de soirée d'un capteur Programme TNT FR, en un seul appel.
 - **Enregistrer à la main** : chaîne, titre, sous-titre, début et fin.
 - **Recherche de la chaîne** à partir du nom du guide (accents, « + », « HD »… gérés), avec des **correspondances manuelles** si besoin.
-- **Marges** avant et après réglables, **qualité** au choix (automatique, HD, SD, basse définition), modifiables pour chaque enregistrement.
+- **Marges** avant et après réglables dans les options, et modifiables ou désactivables à chaque enregistrement, **qualité** au choix (automatique, HD, SD, basse définition), modifiables pour chaque enregistrement.
 - **Heure de fin modifiable** au moment d'enregistrer : si elle est avant l'heure de début, c'est le lendemain (23:30 → 00:45).
 - **Répéter chaque semaine** : même chaîne, même jour, même horaire ; chaque semaine, l'enregistrement suivant est programmé sur la Freebox. Une occurrence annulée n'est pas recréée.
 - **Pas de doublon** : un 2e appel pour le même programme renvoie l'enregistrement existant.
@@ -126,6 +126,7 @@ Si la carte [Programme TNT FR](https://github.com/cyclope205/programme-tnt-fr) e
 
 - **Fin** : heure de fin, préremplie avec celle du programme. Si elle est avant l'heure de début, « (le lendemain) » s'affiche : l'enregistrement se termine le jour suivant.
 - **Chaque semaine** : répète l'enregistrement chaque semaine, le même jour à la même heure.
+- **Marges** : cochées par défaut avec les valeurs des options de l'intégration ; modifiables pour cet enregistrement (0 à 60 min avant, 0 à 120 min après) ou désactivées en décochant la case. La ligne « Enregistrement de … à … » donne les heures réelles, marges comprises.
 - **⏺ Enregistrer sur la Freebox** : programme l'enregistrement, avec les marges des options. Fonctionne aussi pour les jours suivants dans le Guide TV, et pour un programme déjà commencé (l'enregistrement démarre tout de suite).
 - **Enregistrement programmé** : le programme est déjà enregistré (depuis Home Assistant, le Player ou Freebox OS), avec ses horaires réels (marges comprises) et 🔁 s'il est répété. **Annuler l'enregistrement** puis **Confirmer l'annulation** le supprime. **Répéter chaque semaine** ajoute la répétition ; **Arrêter la répétition** puis **Confirmer l'arrêt** l'arrête et supprime les enregistrements des semaines suivantes déjà programmés (celui du programme affiché est gardé).
 - **Chaîne introuvable sur la Freebox** : ajoutez une correspondance dans les options de l'intégration.
@@ -161,9 +162,10 @@ pvr_entity: sensor.freebox_pvr_enregistrements_programmes   # facultatif : trouv
 | **Ce soir** — deux programmes enregistrés, une chaîne introuvable<br>![Ce soir](docs/screenshots/ce_soir.png) | **Maintenant** — progression et détail d'un programme<br>![Maintenant](docs/screenshots/maintenant.png) |
 | **Enregistrements** — en cours, prévus et répétitions<br>![Enregistrements](docs/screenshots/enregistrements.png) | **Annulation** — confirmation en un appui<br>![Annulation](docs/screenshots/annulation.png) |
 | **Thème sombre**<br>![Sombre](docs/screenshots/sombre.png) | **En anglais**<br>![English](docs/screenshots/english.png) |
-| **Fiche Programme TNT FR** — enregistrer<br>![Fiche](docs/screenshots/fiche_enregistrer.png) | **Fiche Programme TNT FR** — déjà enregistré<br>![Fiche enregistrée](docs/screenshots/fiche_enregistre.png) |
+| **Fiche Programme TNT FR** — fin, chaque semaine, marges<br>![Fiche](docs/screenshots/fiche_enregistrer.png) | **Fiche Programme TNT FR** — déjà enregistré<br>![Fiche enregistrée](docs/screenshots/fiche_enregistre.png) |
 | **Fiche Programme TNT FR** — fin après minuit, chaque semaine<br>![Minuit](docs/screenshots/fiche_minuit.png) | **Fiche Programme TNT FR** — arrêt de la répétition<br>![Arrêter](docs/screenshots/fiche_annuler.png) |
-| **Fiche Programme TNT FR** — thème sombre<br>![Fiche sombre](docs/screenshots/fiche_enregistrer_sombre.png) | **Carte Freebox PVR** — réglages dans le détail d'un programme<br>![Détail](docs/screenshots/carte_detail.png) |
+| **Fiche Programme TNT FR** — sans marges<br>![Sans marges](docs/screenshots/fiche_sans_marges.png) | **Fiche Programme TNT FR** — thème sombre<br>![Fiche sombre](docs/screenshots/fiche_enregistrer_sombre.png) |
+| **Carte Freebox PVR** — réglages dans le détail d'un programme<br>![Détail](docs/screenshots/carte_detail.png) | |
 
 *Captures réalisées sur une installation de démonstration : chaînes et programmes fictifs.*
 
@@ -222,7 +224,7 @@ Freebox PVR schedules **TV recordings on your Freebox** from Home Assistant. It 
 - **Record from the guide**: the current, next, prime time or second-part program of a Programme TNT FR sensor, in a single call.
 - **Record by hand**: channel, title, subtitle, start and end.
 - **Channel lookup** from the guide name (accents, "+", "HD"… handled), with **manual matches** when needed.
-- Adjustable **margins** before and after, selectable **quality** (automatic, HD, SD, low definition), overridable per recording.
+- **Margins** before and after set in the options, and adjustable or turned off for each recording, selectable **quality** (automatic, HD, SD, low definition), overridable per recording.
 - **Adjustable end time** when recording: if it is earlier than the start time, it is the next day (23:30 → 00:45).
 - **Repeat every week**: same channel, same day, same time slot; every week, the next recording is scheduled on the Freebox. A cancelled occurrence is not recreated.
 - **No duplicates**: a second call for the same program returns the existing recording.
@@ -321,6 +323,7 @@ If the [Programme TNT FR](https://github.com/cyclope205/programme-tnt-fr) card i
 
 - **End**: end time, prefilled with the program's. If it is earlier than the start time, "(next day)" is shown: the recording ends on the following day.
 - **Every week**: repeats the recording every week, on the same day at the same time.
+- **Margins**: checked by default with the integration option values; adjustable for this recording (0 to 60 min before, 0 to 120 min after) or turned off by unchecking the box. The "Recording from … to …" line gives the actual times, margins included.
 - **⏺ Record on the Freebox**: schedules the recording, with the option margins. Also works for the next days in the TV guide, and for a program already started (recording starts right away).
 - **Recording scheduled**: the program is already recorded (from Home Assistant, the Player or Freebox OS), with its actual times (margins included) and 🔁 if repeated. **Cancel the recording** then **Confirm cancellation** deletes it. **Repeat every week** adds the repeat; **Stop repeating** then **Confirm stop** stops it and deletes the already scheduled recordings of the following weeks (the one of the displayed program is kept).
 - **Channel not found on the Freebox**: add a match in the integration options.

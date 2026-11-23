@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.4";
+const VERSION_CARTE = "2026.11.5";
 
 const TEXTES = {
   fr: {
@@ -467,13 +467,15 @@ const SURCOUCHE = {
     envoi: "Envoi à la Freebox…", conflit: "Conflit avec un autre enregistrement", ok: "Enregistrement programmé.", deja: "Déjà programmé.", annule: "Enregistrement annulé.",
     fin: "Fin", lendemain: "le lendemain", chaque: "Chaque semaine", le: "le {j} à {h}", repete: "Chaque semaine, le {j} à {h}",
     arreter: "Arrêter la répétition", confirmer_arret: "Confirmer l'arrêt", arretee: "Répétition arrêtée.", ajouter_rep: "Répéter chaque semaine",
-    ok_rep: "Enregistrement programmé, répété chaque semaine.", rep_ajoutee: "Répétition ajoutée.", fin_invalide: "Heure de fin invalide." },
+    ok_rep: "Enregistrement programmé, répété chaque semaine.", rep_ajoutee: "Répétition ajoutée.", fin_invalide: "Heure de fin invalide.",
+    marges: "Marges", avant: "avant", apres: "après", min: "min", resume: "Enregistrement de {d} à {f}", marge_invalide: "Marges : 0 à 60 min avant, 0 à 120 min après." },
   en: { enregistrer: "Record on the Freebox", programme: "Recording scheduled", en_cours: "Recording in progress",
     annuler: "Cancel the recording", confirmer: "Confirm cancellation", introuvable: "Channel not found on the Freebox",
     envoi: "Sending to the Freebox…", conflit: "Conflicts with another recording", ok: "Recording scheduled.", deja: "Already scheduled.", annule: "Recording cancelled.",
     fin: "End", lendemain: "next day", chaque: "Every week", le: "on {j} at {h}", repete: "Every week, on {j} at {h}",
     arreter: "Stop repeating", confirmer_arret: "Confirm stop", arretee: "Repeat stopped.", ajouter_rep: "Repeat every week",
-    ok_rep: "Recording scheduled, repeated every week.", rep_ajoutee: "Repeat added.", fin_invalide: "Invalid end time." },
+    ok_rep: "Recording scheduled, repeated every week.", rep_ajoutee: "Repeat added.", fin_invalide: "Invalid end time.",
+    marges: "Margins", avant: "before", apres: "after", min: "min", resume: "Recording from {d} to {f}", marge_invalide: "Margins: 0 to 60 min before, 0 to 120 min after." },
 };
 
 const normaliser = (s) => String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\+/g, "plus").replace(/[^a-z0-9]/g, "");
@@ -507,7 +509,8 @@ function etatPourProgramme(hass, chaine, prog) {
     if (r) { uuid = r.channel_uuid; rec = enregistrementPour(records, uuid, debut, fin); }
   }
   const repet = rec?.repeat_id ? (attr.repeats || []).find((x) => x.id === rec.repeat_id) : null;
-  return { uuid, rec, repet, introuvable: uuid === null && chaine in mapping, debut, fin };
+  const marges = attr.margins || { before: 5, after: 10 };
+  return { uuid, rec, repet, marges, introuvable: uuid === null && chaine in mapping, debut, fin };
 }
 
 /** Panneau d'enregistrement (fiche Programme TNT FR et détail de la carte Freebox PVR).
@@ -542,11 +545,27 @@ function panneauEnregistrement(conteneur, hass, chaine, prog, st, redessiner) {
     if (st.fin === undefined) st.fin = hhmm(finProg);
     const finChoisie = finDepuisHeure(e.debut, st.fin);
     const lendemain = finChoisie && new Date(finChoisie * 1000).toDateString() !== new Date(e.debut * 1000).toDateString();
+    if (st.margesActives === undefined) st.margesActives = (e.marges.before > 0 || e.marges.after > 0);
+    // Marges des options ; si elles sont désactivées (0 et 0), on propose 5 et 10 min quand on coche « Marges »
+    const sansMarge = !(e.marges.before > 0 || e.marges.after > 0);
+    if (st.avant === undefined) st.avant = sansMarge ? 5 : e.marges.before;
+    if (st.apres === undefined) st.apres = sansMarge ? 10 : e.marges.after;
+    const mAvant = st.margesActives ? Number(st.avant) : 0, mApres = st.margesActives ? Number(st.apres) : 0;
+    const resume = finChoisie
+      ? t.resume.replace("{d}", hhmm(Math.max(e.debut - mAvant * 60, Math.floor(Date.now() / 1000)))).replace("{f}", hhmm(finChoisie + mApres * 60))
+      : "";
+    const dis = st.margesActives ? "" : "disabled";
     html = `<div class="fbx-pvr-ligne">` +
       `<label class="fbx-pvr-champ">${esc(t.fin)} <input type="time" class="fbx-pvr-fin" value="${esc(st.fin)}" step="60"></label>` +
       (lendemain ? `<span class="fbx-pvr-info">(${esc(t.lendemain)})</span>` : "") +
       `<label class="fbx-pvr-champ"><input type="checkbox" class="fbx-pvr-hebdo" ${st.hebdo ? "checked" : ""}> ${esc(t.chaque)} <span class="fbx-pvr-info">(${esc(quand(e.debut))})</span></label>` +
-      `</div><div class="fbx-pvr-ligne">${bouton("fbx-rouge", `⏺ ${esc(t.enregistrer)}`, "enregistrer")}</div>`;
+      `</div><div class="fbx-pvr-ligne">` +
+      `<label class="fbx-pvr-champ"><input type="checkbox" class="fbx-pvr-marges" ${st.margesActives ? "checked" : ""}> ${esc(t.marges)}</label>` +
+      `<label class="fbx-pvr-champ ${dis}">${esc(t.avant)} <input type="number" class="fbx-pvr-avant" min="0" max="60" step="1" value="${esc(st.avant)}" ${dis}> ${esc(t.min)}</label>` +
+      `<label class="fbx-pvr-champ ${dis}">${esc(t.apres)} <input type="number" class="fbx-pvr-apres" min="0" max="120" step="1" value="${esc(st.apres)}" ${dis}> ${esc(t.min)}</label>` +
+      `</div>` +
+      (resume ? `<div class="fbx-pvr-ligne"><span class="fbx-pvr-info">${esc(resume)}${lendemain ? ` (${esc(t.lendemain)})` : ""}</span></div>` : "") +
+      `<div class="fbx-pvr-ligne">${bouton("fbx-rouge", `⏺ ${esc(t.enregistrer)}`, "enregistrer")}</div>`;
   }
   if (st.message) html += `<div class="fbx-pvr-ligne"><span class="fbx-pvr-info">${esc(st.message)}</span></div>`;
   conteneur.innerHTML = html;
@@ -556,6 +575,12 @@ function panneauEnregistrement(conteneur, hass, chaine, prog, st, redessiner) {
   conteneur.querySelectorAll("input, label").forEach((el) => el.addEventListener("click", (ev) => ev.stopPropagation()));
   const hebdo = conteneur.querySelector(".fbx-pvr-hebdo");
   if (hebdo) hebdo.addEventListener("change", () => { st.hebdo = hebdo.checked; });
+  const marges = conteneur.querySelector(".fbx-pvr-marges");
+  if (marges) marges.addEventListener("change", () => { st.margesActives = marges.checked; st.message = ""; redessiner(); });
+  for (const [cls, cle] of [[".fbx-pvr-avant", "avant"], [".fbx-pvr-apres", "apres"]]) {
+    const champ = conteneur.querySelector(cls);
+    if (champ) champ.addEventListener("change", () => { st[cle] = champ.value; st.message = ""; redessiner(); });
+  }
 
   conteneur.querySelectorAll("[data-fbx]").forEach((b) => b.addEventListener("click", async (ev) => {
     ev.stopPropagation();
@@ -567,6 +592,10 @@ function panneauEnregistrement(conteneur, hass, chaine, prog, st, redessiner) {
       return;
     }
     if (action === "enregistrer" && !finDepuisHeure(e.debut, st.fin)) { st.message = t.fin_invalide; redessiner(); return; }
+    const entier = (v, max) => { const n = Number(v); return Number.isInteger(n) && n >= 0 && n <= max ? n : null; };
+    if (action === "enregistrer" && st.margesActives && (entier(st.avant, 60) === null || entier(st.apres, 120) === null)) {
+      st.message = t.marge_invalide; redessiner(); return;
+    }
     st.envoi = true; st.confirmer = null; st.message = ""; redessiner();
     try {
       if (action === "enregistrer" || action === "repeter") {
@@ -575,11 +604,13 @@ function panneauEnregistrement(conteneur, hass, chaine, prog, st, redessiner) {
         if (action === "enregistrer") {
           if (st.fin && st.fin !== hhmm(e.fin || 0)) donnees.end_time = st.fin;
           if (st.hebdo) donnees.repeat_weekly = true;
+          donnees.margin_before = st.margesActives ? Number(st.avant) : 0;
+          donnees.margin_after = st.margesActives ? Number(st.apres) : 0;
         } else donnees.repeat_weekly = true;
         const rep = await hass.callService("freebox_pvr", "record", donnees, undefined, false, true);
         const r = rep?.response || {};
         st.message = action === "repeter" ? t.rep_ajoutee : r.already_programmed ? t.deja : (st.hebdo ? t.ok_rep : t.ok);
-        st.fin = undefined; st.hebdo = false;
+        st.fin = undefined; st.hebdo = false; st.margesActives = undefined; st.avant = undefined; st.apres = undefined;
       } else if (action === "annuler" && e.rec) {
         await hass.callService("freebox_pvr", "cancel", { record_id: e.rec.id }, undefined, false, true);
         st.message = t.annule;
@@ -613,6 +644,9 @@ const STYLE_SURCOUCHE = `
   .fbx-pvr-champ { display: inline-flex; align-items: center; gap: 6px; font-size: .85em; cursor: pointer; }
   .fbx-pvr-champ input[type=time] { font: inherit; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--divider-color, #555);
     background: var(--card-background-color, #fff); color: var(--primary-text-color); color-scheme: light dark; }
+  .fbx-pvr-champ input[type=number] { font: inherit; width: 3.6em; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--divider-color, #555);
+    background: var(--card-background-color, #fff); color: var(--primary-text-color); }
+  .fbx-pvr-champ.disabled { opacity: .45; cursor: default; }
   .fbx-pvr-champ input[type=checkbox] { accent-color: #e53935; width: 16px; height: 16px; margin: 0; }
   .fbx-pvr-btn { border: none; font: inherit; font-size: .8em; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
   .fbx-pvr-btn:active { transform: scale(.95); }
