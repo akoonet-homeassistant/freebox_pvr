@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.5";
+const VERSION_CARTE = "2026.11.6";
 
 const TEXTES = {
   fr: {
@@ -282,7 +282,7 @@ class FreeboxPvrCard extends HTMLElement {
             : `<button class="rec actif ${enCours ? "pulse" : ""}" data-action="demander" data-cle="${esc(cle)}" title="${esc(enCours ? t.en_cours : t.programme)}"><ha-icon icon="mdi:record-circle"></ha-icon></button>`;
         return `<div class="enr"><div class="info">
             <div class="ligne1"><span class="cren">${esc(r.channel_name)}</span><span class="heure">${rs ? esc(this._jourHeure(rs)) : ""}${re ? ` – ${esc(this._heure(re))}` : ""}</span>
-            <span class="badge ${enCours ? "rouge" : ""}">${esc(t.etats[r.state] || r.state)}</span>${r.repeat_id ? `<span class="badge">🔁</span>` : ""}${r.conflict ? `<span class="badge rouge">${esc(t.conflit)}</span>` : ""}</div>
+            <span class="badge ${enCours ? "rouge" : ""}">${esc(t.etats[r.state] || r.state)}</span>${r.repeat_id ? `<span class="badge">↻</span>` : ""}${r.conflict ? `<span class="badge rouge">${esc(t.conflit)}</span>` : ""}</div>
             <div class="titre">${esc(r.name)}</div>${r.subname ? `<div class="sous">${esc(r.subname)}</div>` : ""}
           </div><div class="action" data-titre="${esc(r.name)}">${bouton}</div></div>`;
       }).join("") : `<div class="msg">${esc(t.aucun_enr)}</div>`;
@@ -298,7 +298,7 @@ class FreeboxPvrCard extends HTMLElement {
               ? `<button class="rec confirmer" data-action="arreter" data-cle="${esc(cle)}" data-id="${esc(rp.id)}">${esc(t.arreter_court)}</button>`
               : `<button class="rec" data-action="demander" data-cle="${esc(cle)}" title="${esc(t.arreter)}"><ha-icon icon="mdi:repeat-off"></ha-icon></button>`;
           return `<div class="enr"><div class="info">
-              <div class="ligne1"><span class="cren">${esc(rp.channel_name)}</span><span class="heure">🔁 ${esc(jour)} ${esc(rp.time)} – ${esc(fin)}</span></div>
+              <div class="ligne1"><span class="cren">${esc(rp.channel_name)}</span><span class="heure">↻ ${esc(jour)} ${esc(rp.time)} – ${esc(fin)}</span></div>
               <div class="titre">${esc(rp.title)}</div></div><div class="action" data-titre="${esc(rp.title)}">${bouton}</div></div>`;
         }).join("");
       }
@@ -528,18 +528,18 @@ function panneauEnregistrement(conteneur, hass, chaine, prog, st, redessiner) {
   else if (e.rec) {
     const enCours = ["starting", "running"].includes(e.rec.state);
     const finRec = e.rec.end_ts ?? ts(e.rec.end);
-    html = `<div class="fbx-pvr-ligne"><span class="fbx-pvr-etat">⏺ ${esc(enCours ? t.en_cours : t.programme)}</span>` +
+    html = `<div class="fbx-pvr-ligne"><span class="fbx-pvr-etat"><span class="fbx-pvr-point rouge"></span>${esc(enCours ? t.en_cours : t.programme)}</span>` +
       `<span class="fbx-pvr-info">${esc(hhmm(e.rec.start_ts ?? ts(e.rec.start)))} → ${esc(hhmm(finRec))}</span>` +
       (e.rec.conflict ? `<span class="fbx-pvr-info alerte">${esc(t.conflit)}</span>` : "") + `</div>`;
     if (e.repet) {
       const debutRep = e.repet.next_start_ts || e.debut;
-      html += `<div class="fbx-pvr-ligne"><span class="fbx-pvr-info">🔁 ${esc(t.repete.replace("{j}", jourSemaine(debutRep, hass)).replace("{h}", e.repet.time))}</span></div>`;
+      html += `<div class="fbx-pvr-ligne"><span class="fbx-pvr-info">↻ ${esc(t.repete.replace("{j}", jourSemaine(debutRep, hass)).replace("{h}", e.repet.time))}</span></div>`;
     }
     html += `<div class="fbx-pvr-ligne">` +
       (st.confirmer === "annuler" ? bouton("fbx-danger", esc(t.confirmer), "annuler") : bouton("fbx-secondaire", esc(t.annuler), "demander-annuler")) +
       (e.repet
-        ? (st.confirmer === "arreter" ? bouton("fbx-danger", esc(t.confirmer_arret), "arreter") : bouton("fbx-secondaire", `🔁 ${esc(t.arreter)}`, "demander-arreter"))
-        : bouton("fbx-secondaire", `🔁 ${esc(t.ajouter_rep)}`, "repeter")) + `</div>`;
+        ? (st.confirmer === "arreter" ? bouton("fbx-danger", esc(t.confirmer_arret), "arreter") : bouton("fbx-secondaire", `↻ ${esc(t.arreter)}`, "demander-arreter"))
+        : bouton("fbx-secondaire", `↻ ${esc(t.ajouter_rep)}`, "repeter")) + `</div>`;
   } else {
     const finProg = e.fin || e.debut + 3600;
     if (st.fin === undefined) st.fin = hhmm(finProg);
@@ -565,7 +565,7 @@ function panneauEnregistrement(conteneur, hass, chaine, prog, st, redessiner) {
       `<label class="fbx-pvr-champ ${dis}">${esc(t.apres)} <input type="number" class="fbx-pvr-apres" min="0" max="120" step="1" value="${esc(st.apres)}" ${dis}> ${esc(t.min)}</label>` +
       `</div>` +
       (resume ? `<div class="fbx-pvr-ligne"><span class="fbx-pvr-info">${esc(resume)}${lendemain ? ` (${esc(t.lendemain)})` : ""}</span></div>` : "") +
-      `<div class="fbx-pvr-ligne">${bouton("fbx-rouge", `⏺ ${esc(t.enregistrer)}`, "enregistrer")}</div>`;
+      `<div class="fbx-pvr-ligne">${bouton("fbx-rouge", `<span class="fbx-pvr-point"></span>${esc(t.enregistrer)}`, "enregistrer")}</div>`;
   }
   if (st.message) html += `<div class="fbx-pvr-ligne"><span class="fbx-pvr-info">${esc(st.message)}</span></div>`;
   conteneur.innerHTML = html;
@@ -653,7 +653,10 @@ const STYLE_SURCOUCHE = `
   .fbx-pvr-btn.fbx-rouge { background: #e53935; color: #fff; }
   .fbx-pvr-btn.fbx-secondaire { background: transparent; color: var(--primary-text-color); border: 1px solid var(--divider-color, #555); }
   .fbx-pvr-btn.fbx-danger { background: #b71c1c; color: #fff; }
-  .fbx-pvr-etat { color: #e53935; font-weight: 600; font-size: .85em; }
+  .fbx-pvr-etat { color: #e53935; font-weight: 600; font-size: .85em; display: inline-flex; align-items: center; gap: 6px; }
+  .fbx-pvr-btn { display: inline-flex; align-items: center; gap: 6px; }
+  .fbx-pvr-point { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #fff; flex: none; }
+  .fbx-pvr-point.rouge { background: #e53935; }
   .fbx-pvr-info { font-size: .8em; opacity: .85; }
   .fbx-pvr-info.alerte { color: #e53935; opacity: 1; }
 `;
