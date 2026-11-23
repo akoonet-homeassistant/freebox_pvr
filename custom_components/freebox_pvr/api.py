@@ -35,6 +35,13 @@ BUILTIN_ALIASES: dict[str, list[str]] = {
 }
 
 
+# Champs renvoyés tels quels lors de la modification d'un enregistrement programmé
+EDITABLE_FIELDS = {
+    "channel_uuid", "channel_name", "channel_quality", "channel_type", "broadcast_type",
+    "media", "path", "name", "subname", "start", "end", "margin_before", "margin_after", "enabled",
+}
+
+
 class FreeboxPvrError(Exception):
     """Erreur générique."""
 
@@ -265,6 +272,13 @@ class FreeboxPvrClient:
         payload = request.payload(media, path_override or path or "Enregistrements")
         _LOGGER.debug("Création d'un enregistrement Freebox : %s", payload)
         result = await self._call(self.fbx.tv.create_tv_record(payload))
+        return result if isinstance(result, dict) else {}
+
+    async def update_record_end(self, record: dict[str, Any], new_end: int) -> dict[str, Any]:
+        """Change l'heure de fin d'un enregistrement programmé (timestamp, marge comprise)."""
+        payload = {k: v for k, v in record.items() if k in EDITABLE_FIELDS}
+        payload["end"] = int(new_end)
+        result = await self._call(self.fbx.tv.edit_programmed_tv_record(int(record["id"]), payload))
         return result if isinstance(result, dict) else {}
 
     async def delete_record(self, record_id: int) -> None:

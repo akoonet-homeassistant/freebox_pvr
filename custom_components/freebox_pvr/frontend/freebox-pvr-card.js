@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.2";
+const VERSION_CARTE = "2026.11.3";
 
 const TEXTES = {
   fr: {
@@ -23,6 +23,8 @@ const TEXTES = {
     deja: "Déjà programmé : {t}",
     ok_ann: "Enregistrement annulé : {t}",
     erreur: "Freebox PVR : {e}",
+    repetitions: "Répétitions chaque semaine", arreter: "Arrêter la répétition (les enregistrements déjà programmés sont gardés)", arreter_court: "Arrêter ?",
+    ok_arret: "Répétition arrêtée : {t}",
     etats: { waiting_start_time: "Prévu", starting: "Démarrage", running: "En cours", finished: "Terminé", failed: "Échec", disabled: "Désactivé" },
     ed: {
       title: "Titre", chaines: "Chaînes (vide = toutes, dans l'ordre choisi)", onglet: "Onglet affiché à l'ouverture",
@@ -48,6 +50,8 @@ const TEXTES = {
     deja: "Already scheduled: {t}",
     ok_ann: "Recording cancelled: {t}",
     erreur: "Freebox PVR: {e}",
+    repetitions: "Weekly repeats", arreter: "Stop repeating (already scheduled recordings are kept)", arreter_court: "Stop?",
+    ok_arret: "Repeat stopped: {t}",
     etats: { waiting_start_time: "Scheduled", starting: "Starting", running: "Recording", finished: "Finished", failed: "Failed", disabled: "Disabled" },
     ed: {
       title: "Title", chaines: "Channels (empty = all, in the chosen order)", onglet: "Tab shown on opening",
@@ -101,6 +105,8 @@ class FreeboxPvrCard extends HTMLElement {
     this._attente = new Set();  // programmes en cours d'envoi
     this._confirmer = null;     // clé du programme dont l'annulation attend une confirmation
     this._signature = "";
+    this._etats = {};           // état des panneaux d'enregistrement (heure de fin, chaque semaine…)
+    this._panneaux = [];
   }
 
   setConfig(config) {
@@ -179,6 +185,20 @@ class FreeboxPvrCard extends HTMLElement {
     }
   }
 
+  async _arreter(id, titre, cle) {
+    const t = this._t();
+    this._confirmer = null;
+    this._attente.add(cle); this._signature = ""; this._rendu();
+    try {
+      await this._hass.callService("freebox_pvr", "stop_repeat", { repeat_id: id }, undefined, false, true);
+      this._notifier(t.ok_arret.replace("{t}", titre));
+    } catch (err) {
+      this._notifier(t.erreur.replace("{e}", err?.message || err));
+    } finally {
+      this._attente.delete(cle); this._signature = ""; this._rendu();
+    }
+  }
+
   _bouton(cle, rec, uuid, fin) {
     const t = this._t();
     const maintenant = Date.now() / 1000;
@@ -215,7 +235,9 @@ class FreeboxPvrCard extends HTMLElement {
     if (ouvert) {
       const affiche = this._config.afficher_affiches ? urlSure(p.poster) : "";
       detail = `<div class="detail">${affiche ? `<img class="affiche" src="${esc(affiche)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}
-        <div>${p.description ? `<p>${esc(p.description)}</p>` : ""}${p.rating ? `<span class="badge">${esc(p.rating)}</span>` : ""}${p.tmdb_rating ? `<span class="badge">★ ${esc(Number(p.tmdb_rating).toFixed(1))}</span>` : ""}</div></div>`;
+        <div class="texte">${p.description ? `<p>${esc(p.description)}</p>` : ""}${p.rating ? `<span class="badge">${esc(p.rating)}</span>` : ""}${p.tmdb_rating ? `<span class="badge">★ ${esc(Number(p.tmdb_rating).toFixed(1))}</span>` : ""}
+        <div class="fbx-pvr-row" data-panneau="${esc(cle)}"></div></div></div>`;
+      this._panneaux.push({ cle, chaine: this._hass.states[entite].attributes.channel_name, prog: p });
     }
     return `<div class="prog ${principal ? "principal" : "second"} ${rec ? "programme" : ""}">
       <div class="info" data-action="deplier" data-cle="${esc(cle)}">
@@ -244,6 +266,7 @@ class FreeboxPvrCard extends HTMLElement {
     const records = pvr?.attributes?.records || [];
     const mapping = pvr?.attributes?.guide_channels || {};
     const chaines = this._chaines();
+    this._panneaux = [];
 
     let corps = "";
     if (!pvr) corps = `<div class="msg">${esc(t.aucune_pvr)}</div>`;
@@ -259,10 +282,26 @@ class FreeboxPvrCard extends HTMLElement {
             : `<button class="rec actif ${enCours ? "pulse" : ""}" data-action="demander" data-cle="${esc(cle)}" title="${esc(enCours ? t.en_cours : t.programme)}"><ha-icon icon="mdi:record-circle"></ha-icon></button>`;
         return `<div class="enr"><div class="info">
             <div class="ligne1"><span class="cren">${esc(r.channel_name)}</span><span class="heure">${rs ? esc(this._jourHeure(rs)) : ""}${re ? ` – ${esc(this._heure(re))}` : ""}</span>
-            <span class="badge ${enCours ? "rouge" : ""}">${esc(t.etats[r.state] || r.state)}</span>${r.conflict ? `<span class="badge rouge">${esc(t.conflit)}</span>` : ""}</div>
+            <span class="badge ${enCours ? "rouge" : ""}">${esc(t.etats[r.state] || r.state)}</span>${r.repeat_id ? `<span class="badge">🔁</span>` : ""}${r.conflict ? `<span class="badge rouge">${esc(t.conflit)}</span>` : ""}</div>
             <div class="titre">${esc(r.name)}</div>${r.subname ? `<div class="sous">${esc(r.subname)}</div>` : ""}
           </div><div class="action" data-titre="${esc(r.name)}">${bouton}</div></div>`;
       }).join("") : `<div class="msg">${esc(t.aucun_enr)}</div>`;
+      const repeats = pvr.attributes.repeats || [];
+      if (repeats.length) {
+        corps += `<div class="section">${esc(t.repetitions)}</div>` + repeats.map((rp) => {
+          const cle = `rep|${rp.id}`;
+          const jour = rp.next_start_ts ? jourSemaine(rp.next_start_ts, this._hass) : "";
+          const fin = (() => { const [h, m] = rp.time.split(":").map(Number); const x = (h * 60 + m + rp.duration) % 1440; return `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`; })();
+          const bouton = this._attente.has(cle)
+            ? `<span class="rec attente"><ha-circular-progress indeterminate size="small"></ha-circular-progress></span>`
+            : this._confirmer === cle
+              ? `<button class="rec confirmer" data-action="arreter" data-cle="${esc(cle)}" data-id="${esc(rp.id)}">${esc(t.arreter_court)}</button>`
+              : `<button class="rec" data-action="demander" data-cle="${esc(cle)}" title="${esc(t.arreter)}"><ha-icon icon="mdi:repeat-off"></ha-icon></button>`;
+          return `<div class="enr"><div class="info">
+              <div class="ligne1"><span class="cren">${esc(rp.channel_name)}</span><span class="heure">🔁 ${esc(jour)} ${esc(rp.time)} – ${esc(fin)}</span></div>
+              <div class="titre">${esc(rp.title)}</div></div><div class="action" data-titre="${esc(rp.title)}">${bouton}</div></div>`;
+        }).join("");
+      }
     } else if (!chaines.length) corps = `<div class="msg">${esc(t.aucun_guide)}</div>`;
     else {
       const [c1, c2] = ONGLETS[this._onglet] || ONGLETS.soir;
@@ -280,7 +319,7 @@ class FreeboxPvrCard extends HTMLElement {
     const onglets = ["maintenant", "soir", "enregistrements"].map((o) =>
       `<button class="onglet ${o === this._onglet ? "sel" : ""}" data-onglet="${o}">${esc(t.onglets[o])}${o === "enregistrements" && nb ? `<span class="nb">${nb}</span>` : ""}</button>`).join("");
 
-    this.shadowRoot.innerHTML = `<style>${STYLE}</style>
+    this.shadowRoot.innerHTML = `<style>${STYLE}${STYLE_SURCOUCHE}</style>
       <ha-card>
         <div class="entete"><div class="titre-carte"><ha-icon icon="mdi:television-classic"></ha-icon>${esc(this._config.title || t.titre)}</div></div>
         <div class="onglets">${onglets}</div>
@@ -308,8 +347,19 @@ class FreeboxPvrCard extends HTMLElement {
         this._minuteur = setTimeout(() => { if (this._confirmer === cle) { this._confirmer = null; this._signature = ""; this._rendu(); } }, 4000);
       } else if (action === "annuler") {
         this._annuler(Number(el.dataset.id), conteneur.dataset.titre, cle);
+      } else if (action === "arreter") {
+        this._arreter(el.dataset.id, conteneur.dataset.titre, cle);
       }
     }));
+
+    // Panneaux d'enregistrement des programmes dépliés (heure de fin, chaque semaine)
+    for (const { cle, chaine, prog } of this._panneaux) {
+      const zone = this.shadowRoot.querySelector(`[data-panneau="${CSS.escape(cle)}"]`);
+      if (!zone) continue;
+      const st = this._etats[cle] || (this._etats[cle] = {});
+      const redessiner = () => { if (zone.isConnected) panneauEnregistrement(zone, this._hass, chaine, prog, st, redessiner); else { this._signature = ""; this._rendu(); } };
+      panneauEnregistrement(zone, this._hass, chaine, prog, st, redessiner);
+    }
   }
 }
 
@@ -359,6 +409,8 @@ const STYLE = `
   .enr { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; padding: 8px; border-top: 1px solid var(--divider-color); }
   .enr:first-child { border-top: none; }
   .msg { padding: 16px; color: var(--secondary-text-color); text-align: center; }
+  .section { padding: 12px 8px 4px; font-size: .8em; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--secondary-text-color); border-top: 1px solid var(--divider-color); }
+  .detail .texte { flex: 1; min-width: 0; }
 `;
 
 class FreeboxPvrCardEditor extends HTMLElement {
@@ -412,13 +464,31 @@ if (!window.customCards.some((c) => c.type === "freebox-pvr-card")) {
 const SURCOUCHE = {
   fr: { enregistrer: "Enregistrer sur la Freebox", programme: "Enregistrement programmé", en_cours: "Enregistrement en cours",
     annuler: "Annuler l'enregistrement", confirmer: "Confirmer l'annulation", introuvable: "Chaîne introuvable sur la Freebox",
-    envoi: "Envoi à la Freebox…", conflit: "Conflit avec un autre enregistrement", ok: "Enregistrement programmé.", deja: "Déjà programmé.", annule: "Enregistrement annulé." },
+    envoi: "Envoi à la Freebox…", conflit: "Conflit avec un autre enregistrement", ok: "Enregistrement programmé.", deja: "Déjà programmé.", annule: "Enregistrement annulé.",
+    fin: "Fin", lendemain: "le lendemain", chaque: "Chaque semaine", le: "le {j} à {h}", repete: "Chaque semaine, le {j} à {h}",
+    arreter: "Arrêter la répétition", confirmer_arret: "Confirmer l'arrêt", arretee: "Répétition arrêtée.", ajouter_rep: "Répéter chaque semaine",
+    ok_rep: "Enregistrement programmé, répété chaque semaine.", rep_ajoutee: "Répétition ajoutée.", fin_invalide: "Heure de fin invalide." },
   en: { enregistrer: "Record on the Freebox", programme: "Recording scheduled", en_cours: "Recording in progress",
     annuler: "Cancel the recording", confirmer: "Confirm cancellation", introuvable: "Channel not found on the Freebox",
-    envoi: "Sending to the Freebox…", conflit: "Conflicts with another recording", ok: "Recording scheduled.", deja: "Already scheduled.", annule: "Recording cancelled." },
+    envoi: "Sending to the Freebox…", conflit: "Conflicts with another recording", ok: "Recording scheduled.", deja: "Already scheduled.", annule: "Recording cancelled.",
+    fin: "End", lendemain: "next day", chaque: "Every week", le: "on {j} at {h}", repete: "Every week, on {j} at {h}",
+    arreter: "Stop repeating", confirmer_arret: "Confirm stop", arretee: "Repeat stopped.", ajouter_rep: "Repeat every week",
+    ok_rep: "Recording scheduled, repeated every week.", rep_ajoutee: "Repeat added.", fin_invalide: "Invalid end time." },
 };
 
 const normaliser = (s) => String(s || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\+/g, "plus").replace(/[^a-z0-9]/g, "");
+const hhmm = (sec) => { const d = new Date(sec * 1000); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+const jourSemaine = (sec, hass) => new Date(sec * 1000).toLocaleDateString(langue(hass) === "fr" ? "fr-FR" : "en-GB", { weekday: "long" });
+
+/** Fin choisie (HH:MM) → timestamp : le jour du début, ou le lendemain si elle n'est pas après le début. */
+function finDepuisHeure(debut, valeur) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(valeur || "");
+  if (!m) return null;
+  const d = new Date(debut * 1000);
+  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  if (d.getTime() / 1000 <= debut) d.setDate(d.getDate() + 1);
+  return Math.floor(d.getTime() / 1000);
+}
 
 function etatPourProgramme(hass, chaine, prog) {
   const pvrId = capteurPvr(hass, {});
@@ -436,45 +506,87 @@ function etatPourProgramme(hass, chaine, prog) {
     const r = records.find((x) => normaliser(x.channel_name) === n);
     if (r) { uuid = r.channel_uuid; rec = enregistrementPour(records, uuid, debut, fin); }
   }
-  return { uuid, rec, introuvable: uuid === null && chaine in mapping, debut, fin };
+  const repet = rec?.repeat_id ? (attr.repeats || []).find((x) => x.id === rec.repeat_id) : null;
+  return { uuid, rec, repet, introuvable: uuid === null && chaine in mapping, debut, fin };
 }
 
-function dessinerLigne(carte, ligne, chaine, prog) {
-  const hass = carte._hass || carte.hass;
-  if (!hass) { ligne.hidden = true; return; }
+/** Panneau d'enregistrement (fiche Programme TNT FR et détail de la carte Freebox PVR).
+    st : état local conservé entre deux rendus ; redessiner : callback de rendu. */
+function panneauEnregistrement(conteneur, hass, chaine, prog, st, redessiner) {
   const t = SURCOUCHE[langue(hass)];
   const e = etatPourProgramme(hass, chaine, prog);
-  if (!e || !prog.title || !e.debut || (e.fin && e.fin <= Date.now() / 1000)) { ligne.hidden = true; return; }
-  ligne.hidden = false;
-  const st = ligne.__fbx || (ligne.__fbx = {});
+  if (!e || !prog.title || !e.debut || (e.fin && e.fin <= Date.now() / 1000)) { conteneur.hidden = true; return; }
+  conteneur.hidden = false;
   const bouton = (cls, txt, action) => `<button type="button" class="fbx-pvr-btn ${cls}" data-fbx="${action}">${txt}</button>`;
+  const quand = (sec) => t.le.replace("{j}", jourSemaine(sec, hass)).replace("{h}", hhmm(sec));
   let html;
   if (st.envoi) html = `<span class="fbx-pvr-info">${esc(t.envoi)}</span>`;
   else if (e.introuvable) html = `<span class="fbx-pvr-info">${esc(t.introuvable)}</span>`;
   else if (e.rec) {
     const enCours = ["starting", "running"].includes(e.rec.state);
-    html = `<span class="fbx-pvr-etat">⏺ ${esc(enCours ? t.en_cours : t.programme)}</span>` +
-      (st.confirmer ? bouton("danger", esc(t.confirmer), "annuler") : bouton("secondaire", esc(t.annuler), "demander")) +
-      (e.rec.conflict ? `<span class="fbx-pvr-info alerte">${esc(t.conflit)}</span>` : "");
-  } else html = bouton("rec", `⏺ ${esc(t.enregistrer)}`, "enregistrer");
-  if (st.message) html += `<span class="fbx-pvr-info">${esc(st.message)}</span>`;
-  ligne.innerHTML = html;
-  ligne.querySelectorAll("[data-fbx]").forEach((b) => b.addEventListener("click", async (ev) => {
+    const finRec = e.rec.end_ts ?? ts(e.rec.end);
+    html = `<div class="fbx-pvr-ligne"><span class="fbx-pvr-etat">⏺ ${esc(enCours ? t.en_cours : t.programme)}</span>` +
+      `<span class="fbx-pvr-info">${esc(hhmm(e.rec.start_ts ?? ts(e.rec.start)))} → ${esc(hhmm(finRec))}</span>` +
+      (e.rec.conflict ? `<span class="fbx-pvr-info alerte">${esc(t.conflit)}</span>` : "") + `</div>`;
+    if (e.repet) {
+      const debutRep = e.repet.next_start_ts || e.debut;
+      html += `<div class="fbx-pvr-ligne"><span class="fbx-pvr-info">🔁 ${esc(t.repete.replace("{j}", jourSemaine(debutRep, hass)).replace("{h}", e.repet.time))}</span></div>`;
+    }
+    html += `<div class="fbx-pvr-ligne">` +
+      (st.confirmer === "annuler" ? bouton("fbx-danger", esc(t.confirmer), "annuler") : bouton("fbx-secondaire", esc(t.annuler), "demander-annuler")) +
+      (e.repet
+        ? (st.confirmer === "arreter" ? bouton("fbx-danger", esc(t.confirmer_arret), "arreter") : bouton("fbx-secondaire", `🔁 ${esc(t.arreter)}`, "demander-arreter"))
+        : bouton("fbx-secondaire", `🔁 ${esc(t.ajouter_rep)}`, "repeter")) + `</div>`;
+  } else {
+    const finProg = e.fin || e.debut + 3600;
+    if (st.fin === undefined) st.fin = hhmm(finProg);
+    const finChoisie = finDepuisHeure(e.debut, st.fin);
+    const lendemain = finChoisie && new Date(finChoisie * 1000).toDateString() !== new Date(e.debut * 1000).toDateString();
+    html = `<div class="fbx-pvr-ligne">` +
+      `<label class="fbx-pvr-champ">${esc(t.fin)} <input type="time" class="fbx-pvr-fin" value="${esc(st.fin)}" step="60"></label>` +
+      (lendemain ? `<span class="fbx-pvr-info">(${esc(t.lendemain)})</span>` : "") +
+      `<label class="fbx-pvr-champ"><input type="checkbox" class="fbx-pvr-hebdo" ${st.hebdo ? "checked" : ""}> ${esc(t.chaque)} <span class="fbx-pvr-info">(${esc(quand(e.debut))})</span></label>` +
+      `</div><div class="fbx-pvr-ligne">${bouton("fbx-rouge", `⏺ ${esc(t.enregistrer)}`, "enregistrer")}</div>`;
+  }
+  if (st.message) html += `<div class="fbx-pvr-ligne"><span class="fbx-pvr-info">${esc(st.message)}</span></div>`;
+  conteneur.innerHTML = html;
+
+  const champFin = conteneur.querySelector(".fbx-pvr-fin");
+  if (champFin) champFin.addEventListener("change", (ev) => { ev.stopPropagation(); st.fin = champFin.value; st.message = ""; redessiner(); });
+  conteneur.querySelectorAll("input, label").forEach((el) => el.addEventListener("click", (ev) => ev.stopPropagation()));
+  const hebdo = conteneur.querySelector(".fbx-pvr-hebdo");
+  if (hebdo) hebdo.addEventListener("change", () => { st.hebdo = hebdo.checked; });
+
+  conteneur.querySelectorAll("[data-fbx]").forEach((b) => b.addEventListener("click", async (ev) => {
     ev.stopPropagation();
     const action = b.dataset.fbx;
-    const redessiner = () => { if (ligne.isConnected && carte.__fbxProg === prog) dessinerLigne(carte, ligne, chaine, prog); };
-    if (action === "demander") { st.confirmer = true; st.message = ""; redessiner(); setTimeout(() => { st.confirmer = false; redessiner(); }, 4000); return; }
-    st.envoi = true; st.confirmer = false; st.message = ""; redessiner();
+    if (action.startsWith("demander-")) {
+      st.confirmer = action.slice(9); st.message = ""; redessiner();
+      clearTimeout(st.minuteur);
+      st.minuteur = setTimeout(() => { st.confirmer = null; redessiner(); }, 4000);
+      return;
+    }
+    if (action === "enregistrer" && !finDepuisHeure(e.debut, st.fin)) { st.message = t.fin_invalide; redessiner(); return; }
+    st.envoi = true; st.confirmer = null; st.message = ""; redessiner();
     try {
-      if (action === "enregistrer") {
-        const rep = await hass.callService("freebox_pvr", "record", {
-          channel_name: chaine, title: prog.title, ...(prog.subtitle ? { subtitle: prog.subtitle } : {}),
-          start: prog.start, end: prog.stop || prog.end,
-        }, undefined, false, true);
-        st.message = rep?.response?.already_programmed ? t.deja : t.ok;
+      if (action === "enregistrer" || action === "repeter") {
+        const donnees = { channel_name: chaine, title: prog.title, start: prog.start, end: prog.stop || prog.end };
+        if (prog.subtitle) donnees.subtitle = prog.subtitle;
+        if (action === "enregistrer") {
+          if (st.fin && st.fin !== hhmm(e.fin || 0)) donnees.end_time = st.fin;
+          if (st.hebdo) donnees.repeat_weekly = true;
+        } else donnees.repeat_weekly = true;
+        const rep = await hass.callService("freebox_pvr", "record", donnees, undefined, false, true);
+        const r = rep?.response || {};
+        st.message = action === "repeter" ? t.rep_ajoutee : r.already_programmed ? t.deja : (st.hebdo ? t.ok_rep : t.ok);
+        st.fin = undefined; st.hebdo = false;
       } else if (action === "annuler" && e.rec) {
         await hass.callService("freebox_pvr", "cancel", { record_id: e.rec.id }, undefined, false, true);
         st.message = t.annule;
+      } else if (action === "arreter" && e.repet) {
+        await hass.callService("freebox_pvr", "stop_repeat",
+          { repeat_id: e.repet.id, cancel_scheduled: true, keep_record_id: e.rec.id }, undefined, false, true);
+        st.message = t.arretee;
       }
     } catch (err) {
       st.message = `Freebox PVR : ${err?.message || err}`;
@@ -486,14 +598,27 @@ function dessinerLigne(carte, ligne, chaine, prog) {
   }));
 }
 
+function dessinerLigne(carte, ligne, chaine, prog) {
+  const hass = carte._hass || carte.hass;
+  if (!hass) { ligne.hidden = true; return; }
+  const st = ligne.__fbx || (ligne.__fbx = {});
+  const redessiner = () => { if (ligne.isConnected && carte.__fbxProg === prog) dessinerLigne(carte, ligne, chaine, prog); };
+  panneauEnregistrement(ligne, carte._hass || carte.hass, chaine, prog, st, redessiner);
+}
+
 const STYLE_SURCOUCHE = `
-  .fbx-pvr-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--divider-color, #444); }
+  .fbx-pvr-row { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--divider-color, #444); }
   .fbx-pvr-row[hidden] { display: none; }
+  .fbx-pvr-ligne { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+  .fbx-pvr-champ { display: inline-flex; align-items: center; gap: 6px; font-size: .85em; cursor: pointer; }
+  .fbx-pvr-champ input[type=time] { font: inherit; padding: 3px 6px; border-radius: 8px; border: 1px solid var(--divider-color, #555);
+    background: var(--card-background-color, #fff); color: var(--primary-text-color); color-scheme: light dark; }
+  .fbx-pvr-champ input[type=checkbox] { accent-color: #e53935; width: 16px; height: 16px; margin: 0; }
   .fbx-pvr-btn { border: none; font: inherit; font-size: .8em; font-weight: 600; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
   .fbx-pvr-btn:active { transform: scale(.95); }
-  .fbx-pvr-btn.rec { background: #e53935; color: #fff; }
-  .fbx-pvr-btn.secondaire { background: transparent; color: var(--primary-text-color); border: 1px solid var(--divider-color, #555); }
-  .fbx-pvr-btn.danger { background: #b71c1c; color: #fff; }
+  .fbx-pvr-btn.fbx-rouge { background: #e53935; color: #fff; }
+  .fbx-pvr-btn.fbx-secondaire { background: transparent; color: var(--primary-text-color); border: 1px solid var(--divider-color, #555); }
+  .fbx-pvr-btn.fbx-danger { background: #b71c1c; color: #fff; }
   .fbx-pvr-etat { color: #e53935; font-weight: 600; font-size: .85em; }
   .fbx-pvr-info { font-size: .8em; opacity: .85; }
   .fbx-pvr-info.alerte { color: #e53935; opacity: 1; }

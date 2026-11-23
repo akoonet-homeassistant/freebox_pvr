@@ -109,6 +109,14 @@
           "name": "End",
           "description": "Program end time."
         },
+        "end_time": {
+          "name": "End time",
+          "description": "Changes the end time. If it is earlier than the start time, it is the next day (e.g. 23:30 → 00:45)."
+        },
+        "repeat_weekly": {
+          "name": "Every week",
+          "description": "Also record the same time slot on this channel every week."
+        },
         "margin_before": {
           "name": "Margin before",
           "description": "Minutes recorded before the start (overrides the option)."
@@ -161,6 +169,28 @@
         }
       }
     },
+    "stop_repeat": {
+      "name": "Stop a weekly repeat",
+      "description": "Stops a weekly repeat. Already scheduled recordings are kept unless asked otherwise.",
+      "fields": {
+        "repeat_id": {
+          "name": "Repeat ID",
+          "description": "ID of the weekly repeat (see the repeats attribute of the sensor)."
+        },
+        "cancel_scheduled": {
+          "name": "Also cancel scheduled recordings",
+          "description": "Also deletes the upcoming recordings already scheduled by this repeat."
+        },
+        "keep_record_id": {
+          "name": "Recording to keep",
+          "description": "With the previous option, keeps this scheduled recording."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Only needed if several Freebox are configured."
+        }
+      }
+    },
     "refresh_channels": {
       "name": "Refresh channels",
       "description": "Reloads the Freebox channel list.",
@@ -202,6 +232,9 @@
     },
     "permission_missing": {
       "message": "The app lacks the TV recording (PVR) permission in Freebox OS."
+    },
+    "repeat_not_found": {
+      "message": "Weekly repeat not found."
     },
     "api_error": {
       "message": "Freebox error: {error}"

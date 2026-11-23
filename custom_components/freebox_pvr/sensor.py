@@ -40,8 +40,29 @@ class ScheduledRecordsSensor(FreeboxPvrEntity, SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         records = self.coordinator.data.records
+        repeats = self.coordinator.repeats
+
+        def _attr(rec: dict[str, Any]) -> dict[str, Any]:
+            data = record_to_attr(rec)
+            rule = repeats.rule_for_record(rec.get("id"))
+            data["repeat_id"] = rule["id"] if rule else None
+            return data
+
         return {
-            "records": [record_to_attr(r) for r in _upcoming(records)],
+            "records": [_attr(r) for r in _upcoming(records)],
+            "repeats": [
+                {
+                    "id": rule["id"],
+                    "title": rule["title"],
+                    "channel_name": rule["channel_name"],
+                    "channel_uuid": rule["channel_uuid"],
+                    "weekday": rule["weekday"],
+                    "time": rule["time"],
+                    "duration": rule["duration"],
+                    "next_start_ts": repeats.next_occurrence(rule),
+                }
+                for rule in repeats.rules
+            ],
             "conflicts": sum(1 for r in _upcoming(records) if r.get("conflict")),
             "failed": [record_to_attr(r) for r in records if r.get("state") in {"failed", "start_error", "running_error"}][-5:],
             "guide_channels": self._guide_channels(),

@@ -6,7 +6,7 @@ from datetime import timedelta
 import socket
 
 DOMAIN = "freebox_pvr"
-VERSION = "2026.11.2"
+VERSION = "2026.11.3"
 
 APP_DESC: dict[str, str] = {
     "app_id": "fr.akoonet.freebox_pvr",
@@ -49,7 +49,11 @@ ATTR_TITLE = "title"
 ATTR_SUBTITLE = "subtitle"
 ATTR_START = "start"
 ATTR_END = "end"
+ATTR_END_TIME = "end_time"
+ATTR_REPEAT_WEEKLY = "repeat_weekly"
+ATTR_REPEAT_ID = "repeat_id"
 
 SERVICE_RECORD = "record"
 SERVICE_CANCEL = "cancel"
 SERVICE_REFRESH_CHANNELS = "refresh_channels"
+SERVICE_STOP_REPEAT = "stop_repeat"

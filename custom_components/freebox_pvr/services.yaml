@@ -39,6 +39,14 @@ record:
       example: "2026-11-23T22:55:00+01:00"
       selector:
         datetime:
+    end_time:
+      example: "00:45"
+      selector:
+        time:
+    repeat_weekly:
+      default: false
+      selector:
+        boolean:
     margin_before:
       selector:
         number:
@@ -101,6 +109,28 @@ cancel:
     start:
       selector:
         datetime:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freebox_pvr
+
+stop_repeat:
+  fields:
+    repeat_id:
+      required: true
+      example: "a1b2c3d4"
+      selector:
+        text:
+    cancel_scheduled:
+      default: false
+      selector:
+        boolean:
+    keep_record_id:
+      selector:
+        number:
+          min: 0
+          max: 1000000
+          mode: box
     config_entry_id:
       selector:
         config_entry:

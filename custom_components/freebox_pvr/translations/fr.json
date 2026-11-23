@@ -109,6 +109,14 @@
           "name": "Fin",
           "description": "Heure de fin du programme."
         },
+        "end_time": {
+          "name": "Heure de fin",
+          "description": "Change l'heure de fin. Si elle est avant l'heure de début, c'est le lendemain (ex. 23:30 → 00:45)."
+        },
+        "repeat_weekly": {
+          "name": "Chaque semaine",
+          "description": "Enregistrer aussi chaque semaine le même créneau sur cette chaîne."
+        },
         "margin_before": {
           "name": "Marge avant",
           "description": "Minutes enregistrées avant le début (remplace l'option)."
@@ -161,6 +169,28 @@
         }
       }
     },
+    "stop_repeat": {
+      "name": "Arrêter une répétition",
+      "description": "Arrête une répétition hebdomadaire. Les enregistrements déjà programmés sont gardés, sauf demande contraire.",
+      "fields": {
+        "repeat_id": {
+          "name": "Identifiant de répétition",
+          "description": "Identifiant de la répétition (voir l'attribut repeats du capteur)."
+        },
+        "cancel_scheduled": {
+          "name": "Annuler aussi les enregistrements prévus",
+          "description": "Supprime aussi les prochains enregistrements déjà programmés par cette répétition."
+        },
+        "keep_record_id": {
+          "name": "Enregistrement à garder",
+          "description": "Avec l'option précédente, garde cet enregistrement programmé."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Utile seulement si plusieurs Freebox sont configurées."
+        }
+      }
+    },
     "refresh_channels": {
       "name": "Actualiser les chaînes",
       "description": "Recharge la liste des chaînes de la Freebox.",
@@ -202,6 +232,9 @@
     },
     "permission_missing": {
       "message": "L'application n'a pas le droit sur les enregistrements TV (PVR) dans Freebox OS."
+    },
+    "repeat_not_found": {
+      "message": "Répétition introuvable."
     },
     "api_error": {
       "message": "Erreur Freebox : {error}"

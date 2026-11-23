@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import FreeboxPvrClient, FreeboxPvrError, PermissionMissing
 from .const import CHANNELS_REFRESH, DOMAIN, SCAN_INTERVAL
+from .repeat import RepeatManager
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class FreeboxPvrCoordinator(DataUpdateCoordinator[PvrData]):
             update_interval=SCAN_INTERVAL,
         )
         self.client = client
+        self.repeats = RepeatManager(hass, entry.entry_id)
         self._channels: dict[str, dict[str, Any]] = {}
         self._channels_at: datetime | None = None
 
@@ -54,6 +56,8 @@ class FreeboxPvrCoordinator(DataUpdateCoordinator[PvrData]):
             ):
                 await self.async_refresh_channels()
             records = await self.client.get_records()
+            if self.repeats.rules and await self.repeats.async_ensure(self.client, records):
+                records = await self.client.get_records()
         except PermissionMissing as err:
             raise UpdateFailed(
                 "Droit « Enregistrements TV (PVR) » manquant pour l'application sur la Freebox"
