@@ -31,9 +31,11 @@
           "margin_before": "Marge avant (min)",
           "margin_after": "Marge après (min)",
           "quality": "Qualité",
+          "notify_services": "Prévenir ces appareils",
           "channel_aliases": "Correspondances de chaînes"
         },
         "data_description": {
+          "notify_services": "Quand le guide annonce un autre programme sur le créneau d'une répétition, une notification avec les boutons Annuler / Garder est envoyée à ces appareils (elle s'affiche aussi toujours dans Home Assistant).",
           "channel_aliases": "Une par ligne : Nom du guide = Nom Freebox (ou uuid-webtv-…). Seulement si une chaîne n'est pas trouvée automatiquement."
         }
       }

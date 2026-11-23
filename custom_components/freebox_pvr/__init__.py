@@ -69,6 +69,7 @@ from .const import (
     VERSION,
 )
 from .coordinator import FreeboxPvrCoordinator
+from .guide import async_listen_actions
 from .repeat import compute_end
 
 _LOGGER = logging.getLogger(__name__)
@@ -401,6 +402,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FreeboxPvrConfigEntry) -
         await client.close()
         raise
     entry.runtime_data = coordinator
+    entry.async_on_unload(async_listen_actions(hass, coordinator))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True

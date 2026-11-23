@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import FreeboxPvrClient, FreeboxPvrError, PermissionMissing
 from .const import CHANNELS_REFRESH, DOMAIN, SCAN_INTERVAL
+from .guide import async_check_guide
 from .repeat import RepeatManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -57,6 +58,9 @@ class FreeboxPvrCoordinator(DataUpdateCoordinator[PvrData]):
                 await self.async_refresh_channels()
             records = await self.client.get_records()
             if self.repeats.rules and await self.repeats.async_ensure(self.client, records):
+                records = await self.client.get_records()
+            # Le jour de la diffusion : contrôle des répétitions avec le guide Programme TNT FR
+            if self.repeats.rules and await async_check_guide(self.hass, self, records):
                 records = await self.client.get_records()
         except PermissionMissing as err:
             raise UpdateFailed(

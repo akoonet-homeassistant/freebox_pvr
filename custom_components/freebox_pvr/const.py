@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 DOMAIN = "freebox_pvr"
-VERSION = "2026.11.6"
+VERSION = "2026.11.7"
 
 # Description de l'application envoyée à la Freebox. Elle doit rester FIXE :
 # freebox_api redemande une autorisation sur l'écran du Server dès qu'elle change
@@ -25,6 +25,7 @@ CONF_MARGIN_BEFORE = "margin_before"
 CONF_MARGIN_AFTER = "margin_after"
 CONF_QUALITY = "quality"
 CONF_CHANNEL_ALIASES = "channel_aliases"
+CONF_NOTIFY = "notify_services"
 
 DEFAULT_MARGIN_BEFORE = 5
 DEFAULT_MARGIN_AFTER = 10

@@ -17,6 +17,7 @@ from freebox_api.exceptions import AuthorizationError
 from .api import FreeboxPvrClient, FreeboxPvrError, PermissionMissing
 from .const import (
     CONF_CHANNEL_ALIASES,
+    CONF_NOTIFY,
     CONF_MARGIN_AFTER,
     CONF_MARGIN_BEFORE,
     CONF_QUALITY,
@@ -108,6 +109,11 @@ class FreeboxPvrOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
         opts = self.config_entry.options
+        notify_services = sorted(
+            f"notify.{name}"
+            for name in self.hass.services.async_services_for_domain("notify")
+            if name not in ("send_message", "persistent_notification", "notify")
+        )
         schema = vol.Schema(
             {
                 vol.Required(
@@ -122,6 +128,9 @@ class FreeboxPvrOptionsFlow(OptionsFlow):
                 ),
                 vol.Required(CONF_QUALITY, default=opts.get(CONF_QUALITY, DEFAULT_QUALITY)): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=QUALITIES, translation_key="quality", mode=selector.SelectSelectorMode.DROPDOWN)
+                ),
+                vol.Optional(CONF_NOTIFY, default=[s for s in opts.get(CONF_NOTIFY, []) if s in notify_services]): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=notify_services, multiple=True, mode=selector.SelectSelectorMode.LIST)
                 ),
                 vol.Optional(
                     CONF_CHANNEL_ALIASES,

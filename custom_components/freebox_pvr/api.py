@@ -305,12 +305,16 @@ class FreeboxPvrClient:
         result = await self._call(self.fbx.tv.create_tv_record(payload))
         return result if isinstance(result, dict) else {}
 
-    async def update_record_end(self, record: dict[str, Any], new_end: int) -> dict[str, Any]:
-        """Change l'heure de fin d'un enregistrement programmé (timestamp, marge comprise)."""
+    async def update_record(self, record: dict[str, Any], changes: dict[str, Any]) -> dict[str, Any]:
+        """Modifie un enregistrement programmé (horaires en timestamp, marges comprises ; sous-titre…)."""
         payload = {k: v for k, v in record.items() if k in EDITABLE_FIELDS}
-        payload["end"] = int(new_end)
+        payload.update(changes)
         result = await self._call(self.fbx.tv.edit_programmed_tv_record(int(record["id"]), payload))
         return result if isinstance(result, dict) else {}
+
+    async def update_record_end(self, record: dict[str, Any], new_end: int) -> dict[str, Any]:
+        """Change l'heure de fin d'un enregistrement programmé (timestamp, marge comprise)."""
+        return await self.update_record(record, {"end": int(new_end)})
 
     async def delete_record(self, record_id: int) -> None:
         await self._call(self.fbx.tv.delete_programmed_tv_record(int(record_id)))
