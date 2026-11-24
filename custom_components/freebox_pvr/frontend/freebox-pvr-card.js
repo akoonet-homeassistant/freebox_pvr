@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.10";
+const VERSION_CARTE = "2026.11.11";
 
 const TEXTES = {
   fr: {
@@ -1097,7 +1097,15 @@ function installerOnglet(proto) {
       const els = carte._els;
       const liens = els?.viewLinks || {};
       const zone = Object.values(liens)[0]?.parentElement;
-      if (!els || !zone || (carte.__fbxBouton && carte.__fbxBouton.isConnected)) return;
+      if (!els || !zone) return;
+      // Déjà ajouté dans cet en-tête ? (la carte peut être retirée puis remise dans la page par
+      // Home Assistant : on vérifie dans l'en-tête lui-même, pas dans la page)
+      const existants = zone.querySelectorAll(".fbx-onglet");
+      if (existants.length) {
+        existants.forEach((b, i) => { if (i > 0) b.remove(); });
+        if (carte.__fbxBouton !== existants[0]) carte.__fbxBouton = existants[0];
+        return;
+      }
       const t = SURCOUCHE[langue(carte._hass)];
       const bouton = document.createElement("button");
       bouton.type = "button";
@@ -1108,6 +1116,8 @@ function installerOnglet(proto) {
       zone.appendChild(bouton);
       // Un clic sur Carrousel / Guide TV / Top films quitte l'onglet Enregistrements
       Object.values(liens).forEach((l) => l.addEventListener("click", () => { carte.__fbxVue = false; }, { capture: true }));
+      const parent = (els.filmsRoot || els.guideRoot || els.body).parentElement;
+      parent?.querySelectorAll(":scope > .fbx-racine").forEach((r) => r.remove());
       const racine = document.createElement("div");
       racine.className = "fbx-racine";
       racine.hidden = true;
