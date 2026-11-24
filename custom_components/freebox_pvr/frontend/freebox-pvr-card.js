@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.8";
+const VERSION_CARTE = "2026.11.9";
 
 const TEXTES = {
   fr: {
@@ -25,6 +25,8 @@ const TEXTES = {
     erreur: "Freebox PVR : {e}",
     repetitions: "Répétitions chaque semaine", arreter: "Arrêter la répétition (les enregistrements déjà programmés sont gardés)", arreter_court: "Arrêter ?",
     ok_arret: "Répétition arrêtée : {t}",
+    titre_enr: "Enregistrements", rang_avenir: "En cours et à venir", rang_rep: "Répétitions chaque semaine", rang_finis: "Terminés",
+    rien: "Aucun enregistrement.", precedent: "Précédent", suivant: "Suivant",
     a_venir: "À venir", termines: "Terminés", aucun_termine: "Aucun enregistrement terminé sur la Freebox.", tout_afficher: "Tout afficher ({n})",
     confirmer_court: "Confirmer ?", en_pause: "En pause",
     act: { pause_record: "Mettre en pause", resume_record: "Reprendre", cancel: "Annuler l'enregistrement", stop_record: "Arrêter l'enregistrement (la partie enregistrée est gardée)",
@@ -36,6 +38,7 @@ const TEXTES = {
     ed: {
       title: "Titre", chaines: "Chaînes (vide = toutes, dans l'ordre choisi)", onglet: "Onglet affiché à l'ouverture",
       afficher_affiches: "Afficher les affiches dans le détail", pvr_entity: "Capteur « Enregistrements programmés » (facultatif)",
+      uniquement_enregistrements: "Afficher uniquement les enregistrements (carrousel)", jaquettes: "Nombre de jaquettes visibles (carrousel)",
     },
   },
   en: {
@@ -59,6 +62,8 @@ const TEXTES = {
     erreur: "Freebox PVR: {e}",
     repetitions: "Weekly repeats", arreter: "Stop repeating (already scheduled recordings are kept)", arreter_court: "Stop?",
     ok_arret: "Repeat stopped: {t}",
+    titre_enr: "Recordings", rang_avenir: "Recording and upcoming", rang_rep: "Weekly repeats", rang_finis: "Finished",
+    rien: "No recording.", precedent: "Previous", suivant: "Next",
     a_venir: "Upcoming", termines: "Finished", aucun_termine: "No finished recording on the Freebox.", tout_afficher: "Show all ({n})",
     confirmer_court: "Confirm?", en_pause: "Paused",
     act: { pause_record: "Pause", resume_record: "Resume", cancel: "Cancel the recording", stop_record: "Stop the recording (what was recorded is kept)",
@@ -70,6 +75,7 @@ const TEXTES = {
     ed: {
       title: "Title", chaines: "Channels (empty = all, in the chosen order)", onglet: "Tab shown on opening",
       afficher_affiches: "Show posters in the details", pvr_entity: "“Scheduled recordings” sensor (optional)",
+      uniquement_enregistrements: "Show recordings only (carousel)", jaquettes: "Number of visible posters (carousel)",
     },
   },
 };
@@ -130,7 +136,8 @@ class FreeboxPvrCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { onglet: "soir", afficher_affiches: true, ...(config || {}) };
+    this._config = { onglet: "soir", afficher_affiches: true, uniquement_enregistrements: false, jaquettes: 3, ...(config || {}) };
+    this._config.jaquettes = Math.min(4, Math.max(1, Math.round(Number(this._config.jaquettes) || 3)));
     if (!["maintenant", "soir", "enregistrements"].includes(this._config.onglet)) this._config.onglet = "soir";
     this._onglet = this._config.onglet;
     this._signature = "";
@@ -143,7 +150,7 @@ class FreeboxPvrCard extends HTMLElement {
     if (sig !== this._signature) { this._signature = sig; this._rendu(); }
   }
 
-  getCardSize() { return 2 + this._chaines().length; }
+  getCardSize() { return this._config?.uniquement_enregistrements ? 8 : 2 + this._chaines().length; }
   getGridOptions() { return { columns: 12, min_columns: 6, rows: "auto" }; }
 
   _t() { return TEXTES[langue(this._hass)]; }
@@ -309,6 +316,94 @@ class FreeboxPvrCard extends HTMLElement {
     return html;
   }
 
+  /** Chaînes du guide par identifiant Freebox : logo et programmes (pour les affiches des jaquettes). */
+  _guideParUuid(mapping) {
+    const res = {};
+    for (const e of capteursGuide(this._hass)) {
+      const a = this._hass.states[e]?.attributes || {};
+      const info = {
+        logo: urlSure(a.channel_icon || a.entity_picture),
+        progs: ["current", "next", "prime_time", "second_part"].map((k) => a[k]).filter((p) => p && p.start),
+      };
+      const uuid = mapping[a.channel_name];
+      if (uuid) res[uuid] = info;
+      res[`nom:${normaliser(a.channel_name)}`] = info;  // secours si l'enregistrement n'a que le nom de la chaîne
+    }
+    return res;
+  }
+
+  _affiche(rec, guide) {
+    const g = guide[rec.channel_uuid] || guide[`nom:${normaliser(rec.channel_name)}`];
+    if (!g) return { poster: "", logo: "" };
+    const r = { ...rec, channel_uuid: rec.channel_uuid || "nom" };
+    const p = g.progs.find((x) => enregistrementPour([r], r.channel_uuid, ts(x.start), ts(x.stop || x.end)));
+    return { poster: p ? urlSure(p.poster || p.icon) : "", logo: g.logo };
+  }
+
+  _jaquette(r, guide, ligneInfo, badges, boutons, cls = "") {
+    const { poster, logo } = this._affiche(r, guide);
+    const nom = r.name || r.title || "";
+    const visuel = poster
+      ? `<img class="poster" src="${esc(poster)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
+      : `<div class="poster vide">${logo ? `<img class="logo-j" src="${esc(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<span>${esc(nom)}</span></div>`;
+    return `<div class="jaq ${cls}"><div class="visuel">${visuel}<div class="badges">${badges}</div><div class="actions">${boutons}</div></div>
+      <div class="jt">${esc(nom)}</div><div class="js">${ligneInfo}</div></div>`;
+  }
+
+  _rail(cle, titre, items) {
+    const t = this._t();
+    if (!items.length) return "";
+    return `<div class="rang"><div class="rang-titre"><span class="trait"></span>${esc(titre)} <small>${items.length}</small></div>
+      <div class="rail-zone"><button class="fleche g" data-rail="${cle}" data-sens="-1" aria-label="${esc(t.precedent)}">‹</button>
+      <div class="rail" data-rail-id="${cle}" style="--n:${this._config.jaquettes}">${items.join("")}</div>
+      <button class="fleche d" data-rail="${cle}" data-sens="1" aria-label="${esc(t.suivant)}">›</button></div></div>`;
+  }
+
+  _carrousels(pvr) {
+    const t = this._t();
+    const mapping = pvr.attributes.guide_channels || {};
+    const guide = this._guideParUuid(mapping);
+    const records = pvr.attributes.records || [];
+    const repeats = pvr.attributes.repeats || [];
+    const finiId = capteurTermines(this._hass);
+    const finis = finiId ? this._hass.states[finiId].attributes.recordings || [] : [];
+
+    const avenir = records.map((r) => {
+      const rs = r.start_ts ?? ts(r.start), re = r.end_ts ?? ts(r.end);
+      const enCours = ["starting", "running"].includes(r.state);
+      const enPause = r.state === "disabled";
+      const badges = `<span class="b ${enCours ? "rouge pulse" : enPause ? "gris" : ""}">${esc(t.etats[r.state] || r.state)}</span>`
+        + (r.repeat_id ? `<span class="b">↻</span>` : "") + (r.conflict ? `<span class="b rouge">${esc(t.conflit)}</span>` : "");
+      const boutons = enCours
+        ? this._btn("stop_record", r.id, r.name, "mdi:stop", true)
+        : (enPause ? this._btn("resume_record", r.id, r.name, "mdi:play") : this._btn("pause_record", r.id, r.name, "mdi:pause"))
+          + this._btn("cancel", r.id, r.name, "mdi:close", true);
+      const info = `${esc(r.channel_name)} · ${rs ? esc(this._jourHeure(rs)) : ""}${re ? `–${esc(this._heure(re))}` : ""}`;
+      return this._jaquette(r, guide, info, badges, boutons, enPause ? "en-pause" : "");
+    });
+
+    const reps = repeats.map((rp) => {
+      const jour = rp.next_start_ts ? jourSemaine(rp.next_start_ts, this._hass) : "";
+      const faux = { name: rp.title, channel_uuid: rp.channel_uuid, start_ts: rp.next_start_ts, end_ts: (rp.next_start_ts || 0) + rp.duration * 60 };
+      const badges = `<span class="b">↻</span>` + (rp.paused ? `<span class="b gris">${esc(t.en_pause)}</span>` : "");
+      const boutons = (rp.paused ? this._btn("resume_repeat", rp.id, rp.title, "mdi:play") : this._btn("pause_repeat", rp.id, rp.title, "mdi:pause"))
+        + this._btn("stop_repeat", rp.id, rp.title, "mdi:repeat-off", true);
+      return this._jaquette(faux, guide, `${esc(rp.channel_name)} · ${esc(jour)} ${esc(rp.time)}`, badges, boutons, rp.paused ? "en-pause" : "");
+    });
+
+    const termines = finis.map((r) => {
+      const rs = r.start_ts ?? ts(r.start);
+      const echec = ["failed", "start_error", "running_error"].includes(r.state);
+      const duree = r.duration ? t.duree.replace("{n}", Math.round(r.duration / 60)) : "";
+      const badges = echec ? `<span class="b rouge">${esc(t.etats[r.state] || r.state)}</span>` : "";
+      const info = [esc(r.channel_name), rs ? esc(this._jourHeure(rs)) : "", esc(duree), r.byte_size ? esc(this._taille(r.byte_size)) : ""].filter(Boolean).join(" · ");
+      return this._jaquette(r, guide, info, badges, this._btn("delete_finished", r.id, r.name, "mdi:delete-outline", true));
+    });
+
+    const html = this._rail("avenir", t.rang_avenir, avenir) + this._rail("rep", t.rang_rep, reps) + this._rail("finis", t.rang_finis, termines);
+    return html || `<div class="msg">${esc(t.rien)}</div>`;
+  }
+
   _bouton(cle, rec, uuid, fin) {
     const t = this._t();
     const maintenant = Date.now() / 1000;
@@ -381,8 +476,10 @@ class FreeboxPvrCard extends HTMLElement {
     const chaines = this._chaines();
     this._panneaux = [];
 
+    const seulEnr = !!this._config.uniquement_enregistrements;
     let corps = "";
     if (!pvr) corps = `<div class="msg">${esc(t.aucune_pvr)}</div>`;
+    else if (seulEnr) corps = this._carrousels(pvr);
     else if (this._onglet === "enregistrements") {
       corps = this._ongletEnregistrements(pvr);
     } else if (!chaines.length) corps = `<div class="msg">${esc(t.aucun_guide)}</div>`;
@@ -402,12 +499,29 @@ class FreeboxPvrCard extends HTMLElement {
     const onglets = ["maintenant", "soir", "enregistrements"].map((o) =>
       `<button class="onglet ${o === this._onglet ? "sel" : ""}" data-onglet="${o}">${esc(t.onglets[o])}${o === "enregistrements" && nb ? `<span class="nb">${nb}</span>` : ""}</button>`).join("");
 
-    this.shadowRoot.innerHTML = `<style>${STYLE}${STYLE_SURCOUCHE}</style>
+    // Position de défilement des carrousels conservée d'un rendu à l'autre
+    const defil = {};
+    this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => { defil[r.dataset.railId] = r.scrollLeft; });
+    this.shadowRoot.innerHTML = `<style>${STYLE}${STYLE_SURCOUCHE}${STYLE_CARROUSEL}</style>
       <ha-card>
-        <div class="entete"><div class="titre-carte"><ha-icon icon="mdi:television-classic"></ha-icon>${esc(this._config.title || t.titre)}</div></div>
-        <div class="onglets">${onglets}</div>
-        <div class="liste">${corps}</div>
+        <div class="entete"><div class="titre-carte"><ha-icon icon="${seulEnr ? "mdi:record-rec" : "mdi:television-classic"}"></ha-icon>${esc(this._config.title || (seulEnr ? t.titre_enr : t.titre))}</div></div>
+        ${seulEnr ? "" : `<div class="onglets">${onglets}</div>`}
+        <div class="${seulEnr ? "carrousels" : "liste"}">${corps}</div>
       </ha-card>`;
+    this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => { if (defil[r.dataset.railId]) r.scrollLeft = defil[r.dataset.railId]; });
+    this.shadowRoot.querySelectorAll(".fleche").forEach((b) => b.addEventListener("click", () => {
+      const rail = this.shadowRoot.querySelector(`[data-rail-id="${b.dataset.rail}"]`);
+      if (rail) rail.scrollBy({ left: Number(b.dataset.sens) * rail.clientWidth, behavior: "smooth" });
+    }));
+    this.shadowRoot.querySelectorAll(".jaq img").forEach((img) => img.addEventListener("error", () => { img.remove(); }, { once: true }));
+    // Flèches masquées quand tout tient dans la largeur
+    const majFleches = (r) => {
+      const g = r.parentElement.querySelector(".fleche.g"), d = r.parentElement.querySelector(".fleche.d");
+      if (g) g.hidden = r.scrollLeft <= 2;
+      if (d) d.hidden = r.scrollLeft + r.clientWidth >= r.scrollWidth - 2;
+    };
+    this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => r.addEventListener("scroll", () => majFleches(r), { passive: true }));
+    requestAnimationFrame(() => this.shadowRoot.querySelectorAll("[data-rail-id]").forEach(majFleches));
 
     this.shadowRoot.querySelectorAll(".logo img").forEach((img) => img.addEventListener("error", () => {
       const s = document.createElement("span"); s.textContent = img.dataset.initiales || "?"; img.replaceWith(s);
@@ -452,6 +566,42 @@ class FreeboxPvrCard extends HTMLElement {
     }
   }
 }
+
+const STYLE_CARROUSEL = `
+  .carrousels { padding: 0 0 8px; }
+  .rang { padding: 6px 0 4px; }
+  .rang-titre { display: flex; align-items: center; gap: 8px; padding: 4px 16px 8px; font-weight: 600; }
+  .rang-titre small { color: var(--secondary-text-color); font-weight: 400; }
+  .rang-titre .trait { width: 4px; height: 18px; border-radius: 2px; background: #e53935; }
+  .rail-zone { position: relative; }
+  .rail { display: grid; grid-auto-flow: column; grid-auto-columns: calc((100% - (var(--n) - 1) * 10px) / var(--n));
+    gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 0 16px; scroll-padding: 0 16px; scrollbar-width: none; }
+  .rail::-webkit-scrollbar { display: none; }
+  .jaq { scroll-snap-align: start; min-width: 0; }
+  .jaq .visuel { position: relative; aspect-ratio: 2 / 3; border-radius: 12px; overflow: hidden; background: var(--secondary-background-color);
+    box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+  .jaq .poster { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .jaq .poster.vide { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 10px; box-sizing: border-box;
+    background: linear-gradient(160deg, var(--secondary-background-color), var(--divider-color)); text-align: center; }
+  .jaq .poster.vide .logo-j { width: 48%; max-height: 40%; object-fit: contain; }
+  .jaq .poster.vide span { font-weight: 600; font-size: .85em; line-height: 1.2; color: var(--primary-text-color); }
+  .jaq .badges { position: absolute; top: 6px; left: 6px; right: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+  .jaq .b { background: rgba(0,0,0,.62); color: #fff; font-size: .7em; font-weight: 600; border-radius: 10px; padding: 2px 7px; }
+  .jaq .b.rouge { background: #e53935; }
+  .jaq .b.gris { background: rgba(90,90,90,.85); }
+  .jaq .b.pulse { animation: pulse 1.4s ease-in-out infinite; }
+  .jaq .actions { position: absolute; bottom: 6px; right: 6px; display: flex; gap: 6px; }
+  .jaq .actions .rec { width: 34px; height: 34px; background: rgba(0,0,0,.6); color: #fff; }
+  .jaq .actions .rec:hover { background: rgba(0,0,0,.8); }
+  .jaq .actions .rec.confirmer { width: auto; background: #e53935; height: 30px; }
+  .jaq.en-pause .poster { filter: grayscale(.85) brightness(.85); }
+  .jaq .jt { font-weight: 600; font-size: .9em; margin-top: 6px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .jaq .js { font-size: .75em; color: var(--secondary-text-color); margin-top: 2px; line-height: 1.25; }
+  .fleche { position: absolute; top: calc(50% - 40px); z-index: 2; width: 34px; height: 34px; border-radius: 50%; border: none; cursor: pointer;
+    background: rgba(0,0,0,.55); color: #fff; font-size: 22px; line-height: 30px; padding: 0; }
+  .fleche.g { left: 4px; } .fleche.d { right: 4px; }
+  .fleche[hidden] { display: none; }
+`;
 
 const STYLE = `
   ha-card { overflow: hidden; }
@@ -536,8 +686,10 @@ class FreeboxPvrCardEditor extends HTMLElement {
       { name: "onglet", selector: { select: { mode: "dropdown", options: Object.entries(t.onglets).map(([value, label]) => ({ value, label })) } } },
       { name: "afficher_affiches", selector: { boolean: {} } },
       { name: "pvr_entity", selector: { entity: { filter: { integration: "freebox_pvr", domain: "sensor" } } } },
+      { name: "uniquement_enregistrements", selector: { boolean: {} } },
+      { name: "jaquettes", selector: { number: { min: 1, max: 4, step: 1, mode: "slider" } } },
     ];
-    this._form.data = { onglet: "soir", afficher_affiches: true, ...this._config };
+    this._form.data = { onglet: "soir", afficher_affiches: true, uniquement_enregistrements: false, jaquettes: 3, ...this._config };
   }
 }
 
