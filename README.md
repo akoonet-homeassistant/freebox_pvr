@@ -34,6 +34,7 @@ Freebox PVR programme des **enregistrements TV sur votre Freebox** depuis Home A
 - **Programme déjà commencé** : l'enregistrement démarre tout de suite.
 - **Gérer les enregistrements** : consulter les enregistrements à venir et ceux déjà enregistrés sur le disque ; mettre en pause / reprendre un enregistrement ou une répétition ; arrêter un enregistrement en cours ; annuler ; supprimer un enregistrement terminé.
 - **Entités** : enregistrements programmés (avec leur liste), prochain enregistrement, enregistrement en cours.
+- **Onglet Enregistrements dans la carte Programme TNT FR**, à côté de Carrousel et Guide TV.
 - **Bouton dans la carte Programme TNT FR** : la fiche de chaque programme (carrousels, Guide TV, Top films) propose « Enregistrer sur la Freebox », ou indique que le programme est déjà enregistré avec un bouton pour l'annuler. Rien à configurer.
 - **Carte du tableau de bord** « Freebox PVR » : le programme TV (maintenant, ce soir) avec un bouton d'enregistrement sur chaque programme, et la liste des enregistrements ; ou, en option, uniquement les enregistrements en carrousel de jaquettes. Aucune ressource à ajouter.
 - **Interface en français et en anglais**, selon la langue de l'utilisateur.
@@ -132,7 +133,9 @@ Si la carte [Programme TNT FR](https://github.com/cyclope205/programme-tnt-fr) e
 - **Enregistrement programmé** : le programme est déjà enregistré (depuis Home Assistant, le Player ou Freebox OS), avec ses horaires réels (marges comprises) et ↻ s'il est répété. **Mettre en pause** le désactive sans le supprimer (**Reprendre** le réactive) ; pendant l'enregistrement, **Arrêter l'enregistrement** puis **Confirmer l'arrêt** le termine en gardant la partie enregistrée. **Annuler l'enregistrement** puis **Confirmer l'annulation** le supprime. **Répéter chaque semaine** ajoute la répétition ; **Arrêter la répétition** puis **Confirmer l'arrêt** l'arrête et supprime les enregistrements des semaines suivantes déjà programmés (celui du programme affiché est gardé).
 - **Chaîne introuvable sur la Freebox** : ajoutez une correspondance dans les options de l'intégration.
 
-La carte Programme TNT FR n'est pas modifiée : Freebox PVR complète sa fiche au moment où elle s'ouvre. Si une future version de cette carte change son fonctionnement interne, la ligne n'apparaît simplement plus (message dans la console du navigateur) et la carte fonctionne comme avant.
+**Onglet Enregistrements** — un bouton **Enregistrements** s'ajoute à côté de *Carrousel* et *Guide TV* : il affiche, dans la carte, les enregistrements en carrousel (en cours et à venir, répétitions, terminés) avec leurs actions, au même nombre de jaquettes que la carte. Pour le masquer : `freebox_pvr: false` dans la configuration de la carte Programme TNT FR (éditeur de code).
+
+La carte Programme TNT FR n'est pas modifiée : Freebox PVR complète sa fiche au moment où elle s'ouvre, et ajoute son bouton à l'en-tête. Si une future version de cette carte change son fonctionnement interne, la ligne n'apparaît simplement plus (message dans la console du navigateur) et la carte fonctionne comme avant.
 
 ### Carte du tableau de bord
 
@@ -147,8 +150,13 @@ chaines:                     # facultatif : vide = toutes les chaînes du guide,
   - sensor.programme_tnt_fr_france_2
   - sensor.programme_tnt_fr_m6
 afficher_affiches: true      # affiche dans le détail d'un programme
-uniquement_enregistrements: false   # true : uniquement les enregistrements, en carrousel
-jaquettes: 3                 # carrousel : nombre de jaquettes visibles (1 à 4)
+maintenant: true             # afficher l'onglet « Maintenant »
+carrousel_maintenant: false  # … en carrousel de jaquettes plutôt qu'en liste
+soir: true                   # afficher l'onglet « Ce soir »
+carrousel_soir: false
+enregistrements: true        # afficher l'onglet « Enregistrements »
+carrousel_enregistrements: false
+jaquettes: 3                 # carrousels : nombre de jaquettes visibles (1 à 4)
 pvr_entity: sensor.freebox_pvr_enregistrements_programmes   # facultatif : trouvé automatiquement
 ```
 
@@ -161,10 +169,16 @@ pvr_entity: sensor.freebox_pvr_enregistrements_programmes   # facultatif : trouv
   - **Terminés** : enregistrements présents sur le disque de la Freebox (chaîne, date, durée, taille), du plus récent au plus ancien, avec la corbeille pour supprimer (le fichier est effacé).
   - Les actions qui suppriment ou arrêtent demandent une confirmation (« Confirmer ? », 4 secondes).
 
-**Mode « uniquement les enregistrements » (carrousel)** — option *Afficher uniquement les enregistrements* (`uniquement_enregistrements: true`) : la carte n'affiche plus le programme TV mais trois rangées de jaquettes qui défilent, comme la carte Programme TNT FR :
-- **En cours et à venir**, **Répétitions chaque semaine** et **Terminés** ;
-- chaque jaquette reprend l'affiche du guide quand le programme est dans le guide du jour, sinon le logo de la chaîne et le titre ; l'état (en cours, en pause, prévu, répété, échec) est en badge, et les boutons d'action sont sur la jaquette ;
-- *Nombre de jaquettes visibles* (`jaquettes`, 1 à 4) règle la largeur des jaquettes ; les flèches (ou un glissement du doigt) font défiler chaque rangée.
+**Onglets et carrousels** — pour chacun des trois onglets (*Maintenant*, *Ce soir*, *Enregistrements*), deux options : l'afficher ou non, et l'afficher en **liste** ou en **carrousel** de jaquettes qui défilent, comme la carte Programme TNT FR. Avec un seul onglet affiché, la barre d'onglets disparaît.
+- **Maintenant** / **Ce soir** en carrousel : rangées « En ce moment » / « Ensuite », ou « 1re partie » / « 2e partie de soirée », avec l'affiche du guide, le logo de la chaîne, « Direct » et la progression pour le programme en cours. Le bouton rond enregistre d'un appui ; un appui sur la jaquette ouvre le détail (résumé et réglages d'enregistrement : fin, chaque semaine, marges).
+- **Enregistrements** en carrousel : rangées « En cours et à venir », « Répétitions chaque semaine » et « Terminés », avec l'état en badge et les actions sur la jaquette.
+- *Nombre de jaquettes visibles* (`jaquettes`, 1 à 4) ; les flèches (ou un glissement du doigt) font défiler chaque rangée. L'ancienne option `uniquement_enregistrements: true` reste acceptée.
+
+**Affiches des enregistrements** — la Freebox ne fournit pas d'image. L'affiche est cherchée dans cet ordre :
+1. l'affiche **retenue par l'intégration** : tant qu'un enregistrement programmé figure dans le guide du jour, son affiche est mémorisée, puis gardée 60 jours (elle reste donc pour l'enregistrement terminé) ;
+2. le **guide du jour** de Programme TNT FR ;
+3. le **guide complet** de Programme TNT FR (celui de sa vue Guide TV), pour les autres jours, tant qu'il les a encore en mémoire ;
+4. sinon, le logo de la chaîne et le titre.
 
 ### Captures d'écran
 
@@ -172,11 +186,11 @@ pvr_entity: sensor.freebox_pvr_enregistrements_programmes   # facultatif : trouv
 
 | | |
 |---|---|
-| **Carrousel** (4 affiches par rangée)<br>![Carrousel](docs/screenshots/tnt_carrousel.png) | **Fiche** — fin, chaque semaine, marges<br>![Fiche](docs/screenshots/fiche_enregistrer.png) |
+| **Onglet Enregistrements**<br>![Onglet Enregistrements](docs/screenshots/tnt_onglet_enregistrements.png) | **Carrousel** (4 affiches par rangée)<br>![Carrousel](docs/screenshots/tnt_carrousel.png) |
 | **Fiche** — fin après minuit, répétée chaque semaine, marge après modifiée<br>![Minuit](docs/screenshots/fiche_minuit.png) | **Fiche** — sans marges<br>![Sans marges](docs/screenshots/fiche_sans_marges.png) |
 | **Fiche** — programme déjà enregistré et répété<br>![Enregistré](docs/screenshots/fiche_enregistre.png) | **Fiche** — arrêt de la répétition<br>![Arrêter](docs/screenshots/fiche_annuler.png) |
 | **Fiche** — enregistrement en pause<br>![En pause](docs/screenshots/fiche_pause.png) | **Fiche** — enregistrement en cours<br>![En cours](docs/screenshots/fiche_en_cours.png) |
-| **Fiche** — thème sombre<br>![Sombre](docs/screenshots/fiche_enregistrer_sombre.png) | |
+| **Fiche** — fin, chaque semaine, marges<br>![Fiche](docs/screenshots/fiche_enregistrer.png) | **Fiche** — thème sombre<br>![Sombre](docs/screenshots/fiche_enregistrer_sombre.png) |
 
 **Carte Freebox PVR**
 
@@ -185,7 +199,8 @@ pvr_entity: sensor.freebox_pvr_enregistrements_programmes   # facultatif : trouv
 | **Ce soir** — deux programmes enregistrés, une chaîne introuvable<br>![Ce soir](docs/screenshots/ce_soir.png) | **Maintenant** — progression et détail d'un programme<br>![Maintenant](docs/screenshots/maintenant.png) |
 | **Enregistrements à venir** — en cours, en pause, prévus, répétitions<br>![À venir](docs/screenshots/enregistrements.png) | **Enregistrements terminés** — sur le disque de la Freebox<br>![Terminés](docs/screenshots/termines.png) |
 | **Annulation** — confirmation en un appui<br>![Annulation](docs/screenshots/annulation.png) | **Détail d'un programme** — réglages d'enregistrement<br>![Détail](docs/screenshots/carte_detail.png) |
-| **Uniquement les enregistrements** — carrousel<br>![Carrousel](docs/screenshots/carrousel_enregistrements.png) | **Uniquement les enregistrements** — thème sombre<br>![Carrousel sombre](docs/screenshots/carrousel_sombre.png) |
+| **Maintenant en carrousel** — détail et réglages d'une jaquette<br>![Maintenant](docs/screenshots/carrousel_maintenant.png) | **Ce soir en carrousel**<br>![Ce soir](docs/screenshots/carrousel_soir.png) |
+| **Enregistrements en carrousel** — affiches retrouvées pour les terminés<br>![Carrousel](docs/screenshots/carrousel_enregistrements.png) | **Enregistrements en carrousel** — thème sombre<br>![Carrousel sombre](docs/screenshots/carrousel_sombre.png) |
 | **Thème sombre**<br>![Sombre](docs/screenshots/sombre.png) | |
 | **En anglais**<br>![English](docs/screenshots/english.png) | |
 
@@ -258,6 +273,7 @@ Freebox PVR schedules **TV recordings on your Freebox** from Home Assistant. It 
 - **Program already started**: recording starts right away.
 - **Manage recordings**: view upcoming recordings and those already recorded on the disk; pause / resume a recording or a repeat; stop a recording in progress; cancel; delete a finished recording.
 - **Entities**: scheduled recordings (with their list), next recording, recording in progress.
+- **Recordings tab in the Programme TNT FR card**, next to Carousel and TV guide.
 - **Button in the Programme TNT FR card**: each program sheet (carousels, TV guide, top films) offers "Record on the Freebox", or shows that the program is already recorded with a button to cancel it. Nothing to set up.
 - **"Freebox PVR" dashboard card**: the TV guide (now, tonight) with a record button on each program, and the list of recordings; or, as an option, the recordings only as a poster carousel. No resource to add.
 - **French and English interface**, following the user's language.
@@ -356,7 +372,9 @@ If the [Programme TNT FR](https://github.com/cyclope205/programme-tnt-fr) card i
 - **Recording scheduled**: the program is already recorded (from Home Assistant, the Player or Freebox OS), with its actual times (margins included) and ↻ if repeated. **Pause** disables it without deleting it (**Resume** enables it again); while recording, **Stop the recording** then **Confirm stop** ends it and keeps what was recorded. **Cancel the recording** then **Confirm cancellation** deletes it. **Repeat every week** adds the repeat; **Stop repeating** then **Confirm stop** stops it and deletes the already scheduled recordings of the following weeks (the one of the displayed program is kept).
 - **Channel not found on the Freebox**: add a match in the integration options.
 
-The Programme TNT FR card is not modified: Freebox PVR completes its sheet when it opens. If a future version of that card changes how it works internally, the line simply no longer appears (message in the browser console) and the card works as before.
+**Recordings tab** — a **Recordings** button is added next to *Carousel* and *TV guide*: it shows, inside the card, the recordings as a carousel (recording and upcoming, repeats, finished) with their actions, with the card's number of posters. To hide it: `freebox_pvr: false` in the Programme TNT FR card configuration (code editor).
+
+The Programme TNT FR card is not modified: Freebox PVR completes its sheet when it opens, and adds its button to the header. If a future version of that card changes how it works internally, the line simply no longer appears (message in the browser console) and the card works as before.
 
 ### Dashboard card
 
@@ -371,8 +389,13 @@ chaines:                     # optional: empty = all guide channels, otherwise i
   - sensor.programme_tnt_fr_france_2
   - sensor.programme_tnt_fr_m6
 afficher_affiches: true      # poster in the program details
-uniquement_enregistrements: false   # true: recordings only, as a carousel
-jaquettes: 3                 # carousel: number of visible posters (1 to 4)
+maintenant: true             # show the "Now" tab
+carrousel_maintenant: false  # … as a poster carousel instead of a list
+soir: true                   # show the "Tonight" tab
+carrousel_soir: false
+enregistrements: true        # show the "Recordings" tab
+carrousel_enregistrements: false
+jaquettes: 3                 # carousels: number of visible posters (1 to 4)
 pvr_entity: sensor.freebox_pvr_scheduled_recordings   # optional: found automatically
 ```
 
@@ -385,10 +408,16 @@ pvr_entity: sensor.freebox_pvr_scheduled_recordings   # optional: found automati
   - **Finished**: recordings on the Freebox disk (channel, date, duration, size), newest first, with the bin to delete (the file is erased).
   - Actions that delete or stop ask for confirmation ("Confirm?", 4 seconds).
 
-**"Recordings only" mode (carousel)** — *Show recordings only* option (`uniquement_enregistrements: true`): the card no longer shows the TV guide but three rows of scrolling posters, like the Programme TNT FR card:
-- **Recording and upcoming**, **Weekly repeats** and **Finished**;
-- each poster uses the guide poster when the program is in today's guide, otherwise the channel logo and the title; the state (recording, paused, scheduled, repeated, failed) is a badge, and the action buttons are on the poster;
-- *Number of visible posters* (`jaquettes`, 1 to 4) sets the poster width; the arrows (or a swipe) scroll each row.
+**Tabs and carousels** — for each of the three tabs (*Now*, *Tonight*, *Recordings*), two options: show it or not, and show it as a **list** or as a scrolling poster **carousel**, like the Programme TNT FR card. With a single tab shown, the tab bar disappears.
+- **Now** / **Tonight** as a carousel: rows "Now on TV" / "Next", or "Prime time" / "Second part", with the guide poster, the channel logo, "Live" and progress for the current program. The round button records in one tap; tapping the poster opens the details (summary and recording settings: end time, every week, margins).
+- **Recordings** as a carousel: rows "Recording and upcoming", "Weekly repeats" and "Finished", with the state as a badge and the actions on the poster.
+- *Number of visible posters* (`jaquettes`, 1 to 4); the arrows (or a swipe) scroll each row. The former `uniquement_enregistrements: true` option is still accepted.
+
+**Recording posters** — the Freebox provides no image. The poster is looked up in this order:
+1. the poster **kept by the integration**: while a scheduled recording is in today's guide, its poster is stored, then kept 60 days (so it stays for the finished recording);
+2. today's Programme TNT FR **guide**;
+3. the **full** Programme TNT FR guide (the one of its TV guide view), for other days, as long as it still has them in memory;
+4. otherwise, the channel logo and the title.
 
 ### Screenshots
 

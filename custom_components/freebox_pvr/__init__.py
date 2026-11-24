@@ -483,6 +483,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: FreeboxPvrConfigEntry) -
 
     coordinator = FreeboxPvrCoordinator(hass, entry, client)
     await coordinator.repeats.async_load()
+    await coordinator.posters.async_load()
     try:
         await coordinator.async_config_entry_first_refresh()
     except Exception:
@@ -513,3 +514,4 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     from homeassistant.helpers.storage import Store
 
     await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.repeats").async_remove()
+    await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.posters").async_remove()

@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.9";
+const VERSION_CARTE = "2026.11.10";
 
 const TEXTES = {
   fr: {
@@ -25,6 +25,8 @@ const TEXTES = {
     erreur: "Freebox PVR : {e}",
     repetitions: "Répétitions chaque semaine", arreter: "Arrêter la répétition (les enregistrements déjà programmés sont gardés)", arreter_court: "Arrêter ?",
     ok_arret: "Répétition arrêtée : {t}",
+    rangs: { current: "En ce moment", next: "Ensuite", prime_time: "1re partie de soirée", second_part: "2e partie de soirée" },
+    direct: "Direct",
     titre_enr: "Enregistrements", rang_avenir: "En cours et à venir", rang_rep: "Répétitions chaque semaine", rang_finis: "Terminés",
     rien: "Aucun enregistrement.", precedent: "Précédent", suivant: "Suivant",
     a_venir: "À venir", termines: "Terminés", aucun_termine: "Aucun enregistrement terminé sur la Freebox.", tout_afficher: "Tout afficher ({n})",
@@ -38,7 +40,10 @@ const TEXTES = {
     ed: {
       title: "Titre", chaines: "Chaînes (vide = toutes, dans l'ordre choisi)", onglet: "Onglet affiché à l'ouverture",
       afficher_affiches: "Afficher les affiches dans le détail", pvr_entity: "Capteur « Enregistrements programmés » (facultatif)",
-      uniquement_enregistrements: "Afficher uniquement les enregistrements (carrousel)", jaquettes: "Nombre de jaquettes visibles (carrousel)",
+      maintenant: "Afficher « Maintenant »", carrousel_maintenant: "« Maintenant » en carrousel",
+      soir: "Afficher « Ce soir »", carrousel_soir: "« Ce soir » en carrousel",
+      enregistrements: "Afficher « Enregistrements »", carrousel_enregistrements: "« Enregistrements » en carrousel",
+      jaquettes: "Nombre de jaquettes visibles (carrousels)",
     },
   },
   en: {
@@ -62,6 +67,8 @@ const TEXTES = {
     erreur: "Freebox PVR: {e}",
     repetitions: "Weekly repeats", arreter: "Stop repeating (already scheduled recordings are kept)", arreter_court: "Stop?",
     ok_arret: "Repeat stopped: {t}",
+    rangs: { current: "Now on TV", next: "Next", prime_time: "Prime time", second_part: "Second part" },
+    direct: "Live",
     titre_enr: "Recordings", rang_avenir: "Recording and upcoming", rang_rep: "Weekly repeats", rang_finis: "Finished",
     rien: "No recording.", precedent: "Previous", suivant: "Next",
     a_venir: "Upcoming", termines: "Finished", aucun_termine: "No finished recording on the Freebox.", tout_afficher: "Show all ({n})",
@@ -75,12 +82,16 @@ const TEXTES = {
     ed: {
       title: "Title", chaines: "Channels (empty = all, in the chosen order)", onglet: "Tab shown on opening",
       afficher_affiches: "Show posters in the details", pvr_entity: "“Scheduled recordings” sensor (optional)",
-      uniquement_enregistrements: "Show recordings only (carousel)", jaquettes: "Number of visible posters (carousel)",
+      maintenant: "Show “Now”", carrousel_maintenant: "“Now” as a carousel",
+      soir: "Show “Tonight”", carrousel_soir: "“Tonight” as a carousel",
+      enregistrements: "Show “Recordings”", carrousel_enregistrements: "“Recordings” as a carousel",
+      jaquettes: "Number of visible posters (carousels)",
     },
   },
 };
 
 const ONGLETS = { maintenant: ["current", "next"], soir: ["prime_time", "second_part"] };
+const VUES = ["maintenant", "soir", "enregistrements"];
 const GUIDE = "programme_tnt_fr";
 
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -136,10 +147,20 @@ class FreeboxPvrCard extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = { onglet: "soir", afficher_affiches: true, uniquement_enregistrements: false, jaquettes: 3, ...(config || {}) };
-    this._config.jaquettes = Math.min(4, Math.max(1, Math.round(Number(this._config.jaquettes) || 3)));
-    if (!["maintenant", "soir", "enregistrements"].includes(this._config.onglet)) this._config.onglet = "soir";
-    this._onglet = this._config.onglet;
+    const c = {
+      onglet: "soir", afficher_affiches: true, jaquettes: 3,
+      maintenant: true, soir: true, enregistrements: true,
+      carrousel_maintenant: false, carrousel_soir: false, carrousel_enregistrements: false,
+      integre: false, ...(config || {}),
+    };
+    // Ancienne option (2026.11.9) : uniquement les enregistrements, en carrousel
+    if (c.uniquement_enregistrements) Object.assign(c, { maintenant: false, soir: false, enregistrements: true, carrousel_enregistrements: true });
+    c.jaquettes = Math.min(4, Math.max(1, Math.round(Number(c.jaquettes) || 3)));
+    c.vues = VUES.filter((v) => c[v]);
+    if (!c.vues.length) c.vues = [...VUES];
+    if (!c.vues.includes(c.onglet)) c.onglet = c.vues[0];
+    this._config = c;
+    this._onglet = c.onglet;
     this._signature = "";
     if (this._hass) this._rendu();
   }
@@ -150,7 +171,10 @@ class FreeboxPvrCard extends HTMLElement {
     if (sig !== this._signature) { this._signature = sig; this._rendu(); }
   }
 
-  getCardSize() { return this._config?.uniquement_enregistrements ? 8 : 2 + this._chaines().length; }
+  getCardSize() {
+    const c = this._config || {};
+    return c[`carrousel_${this._onglet}`] ? 8 : 2 + (this._onglet === "enregistrements" ? 6 : this._chaines().length);
+  }
   getGridOptions() { return { columns: 12, min_columns: 6, rows: "auto" }; }
 
   _t() { return TEXTES[langue(this._hass)]; }
@@ -322,6 +346,7 @@ class FreeboxPvrCard extends HTMLElement {
     for (const e of capteursGuide(this._hass)) {
       const a = this._hass.states[e]?.attributes || {};
       const info = {
+        channel_id: a.channel_id,
         logo: urlSure(a.channel_icon || a.entity_picture),
         progs: ["current", "next", "prime_time", "second_part"].map((k) => a[k]).filter((p) => p && p.start),
       };
@@ -334,29 +359,91 @@ class FreeboxPvrCard extends HTMLElement {
 
   _affiche(rec, guide) {
     const g = guide[rec.channel_uuid] || guide[`nom:${normaliser(rec.channel_name)}`];
-    if (!g) return { poster: "", logo: "" };
+    const memo = urlSure(rec.poster);  // affiche retenue par l'intégration
+    if (!g) return { poster: memo, logo: "" };
+    if (memo) return { poster: memo, logo: g.logo };
     const r = { ...rec, channel_uuid: rec.channel_uuid || "nom" };
-    const p = g.progs.find((x) => enregistrementPour([r], r.channel_uuid, ts(x.start), ts(x.stop || x.end)));
+    const trouve = (progs) => (progs || []).find((x) => enregistrementPour([r], r.channel_uuid, ts(x.start), ts(x.stop || x.end)));
+    let p = trouve(g.progs);
+    if (!p && g.channel_id) p = trouve(this._guideComplet(g.channel_id, rec.start_ts ?? ts(rec.start)));
     return { poster: p ? urlSure(p.poster || p.icon) : "", logo: g.logo };
+  }
+
+  /** Secours : guide complet d'une journée, via la commande de Programme TNT FR (mis en cache). */
+  _guideComplet(channelId, debut) {
+    if (!debut || Math.abs(debut - Date.now() / 1000) > 8 * 86400) return null;
+    const d = new Date(debut * 1000);
+    if (d.getHours() < 5) d.setDate(d.getDate() - 1);  // les programmes de nuit appartiennent à la soirée précédente
+    const jour = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const cle = `${channelId}|${jour}`;
+    this._cacheGuide = this._cacheGuide || {};
+    if (cle in this._cacheGuide) return this._cacheGuide[cle];
+    this._cacheGuide[cle] = null;
+    this._hass.callWS({ type: "programme_tnt_fr/programmes", channels: [channelId], date: jour })
+      .then((rep) => { this._cacheGuide[cle] = rep?.programmes?.[channelId] || []; this._signature = ""; this._rendu(); })
+      .catch(() => { this._cacheGuide[cle] = []; });
+    return null;
   }
 
   _jaquette(r, guide, ligneInfo, badges, boutons, cls = "") {
     const { poster, logo } = this._affiche(r, guide);
-    const nom = r.name || r.title || "";
+    return this._jaquetteBrute({ poster, logo, nom: r.name || r.title || "", info: ligneInfo, badges, boutons, cls });
+  }
+
+  _jaquetteBrute({ poster, logo, nom, info, badges, boutons, cls = "", cle = "", pied = "" }) {
     const visuel = poster
       ? `<img class="poster" src="${esc(poster)}" alt="" loading="lazy" referrerpolicy="no-referrer">`
       : `<div class="poster vide">${logo ? `<img class="logo-j" src="${esc(logo)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ""}<span>${esc(nom)}</span></div>`;
-    return `<div class="jaq ${cls}"><div class="visuel">${visuel}<div class="badges">${badges}</div><div class="actions">${boutons}</div></div>
-      <div class="jt">${esc(nom)}</div><div class="js">${ligneInfo}</div></div>`;
+    return `<div class="jaq ${cls}" ${cle ? `data-action="choisir" data-cle="${esc(cle)}"` : ""}><div class="visuel">${visuel}${pied}<div class="badges">${badges}</div><div class="actions">${boutons}</div></div>
+      <div class="jt">${esc(nom)}</div><div class="js">${info}</div></div>`;
   }
 
-  _rail(cle, titre, items) {
+  _rail(cle, titre, items, apres = "") {
     const t = this._t();
     if (!items.length) return "";
     return `<div class="rang"><div class="rang-titre"><span class="trait"></span>${esc(titre)} <small>${items.length}</small></div>
       <div class="rail-zone"><button class="fleche g" data-rail="${cle}" data-sens="-1" aria-label="${esc(t.precedent)}">‹</button>
       <div class="rail" data-rail-id="${cle}" style="--n:${this._config.jaquettes}">${items.join("")}</div>
-      <button class="fleche d" data-rail="${cle}" data-sens="1" aria-label="${esc(t.suivant)}">›</button></div></div>`;
+      <button class="fleche d" data-rail="${cle}" data-sens="1" aria-label="${esc(t.suivant)}">›</button></div>${apres}</div>`;
+  }
+
+  _carrouselGuide(pvr) {
+    const t = this._t();
+    const records = pvr.attributes.records || [];
+    const mapping = pvr.attributes.guide_channels || {};
+    const maintenant = Date.now() / 1000;
+    return (ONGLETS[this._onglet] || ONGLETS.soir).map((creneau) => {
+      let detail = "";
+      const items = this._chaines().map((e) => {
+        const a = this._hass.states[e].attributes;
+        const p = a[creneau];
+        if (!p || !p.title) return "";
+        const uuid = mapping[a.channel_name] ?? null;
+        const debut = ts(p.start), fin = ts(p.stop || p.end);
+        if (fin && fin <= maintenant) return "";
+        const rec = enregistrementPour(records, uuid, debut, fin);
+        const cle = `${e}|${creneau}`;
+        const enDirect = debut && fin && debut <= maintenant && maintenant < fin;
+        const badges = (enDirect ? `<span class="b rouge">${esc(t.direct)}</span>` : "")
+          + (rec ? `<span class="b ${rec.state === "disabled" ? "gris" : "rouge"}">${esc(t.etats[rec.state] || rec.state)}</span>` : "")
+          + (rec?.repeat_id ? `<span class="b">↻</span>` : "");
+        const pied = (urlSure(a.channel_icon) ? `<img class="logo-chaine" src="${esc(urlSure(a.channel_icon))}" alt="" loading="lazy" referrerpolicy="no-referrer">` : "")
+          + (enDirect ? `<div class="progres"><div style="width:${Math.round(((maintenant - debut) / (fin - debut)) * 100)}%"></div></div>` : "");
+        const bouton = `<div class="action" data-entite="${esc(e)}" data-creneau="${esc(creneau)}" data-titre="${esc(p.title)}">${this._bouton(cle, rec, uuid, fin)}</div>`;
+        const info = `${esc(a.channel_name)} · ${debut ? esc(this._heure(debut)) : ""}${fin ? `–${esc(this._heure(fin))}` : ""}`;
+        if (this._choix === cle) {
+          const sous = [p.subtitle, p.category].filter(Boolean).map(esc).join(" · ");
+          detail = `<div class="detail-carr"><div class="dc-titre">${esc(p.title)}</div><div class="dc-info">${info}${sous ? ` · ${sous}` : ""}</div>
+            ${p.description ? `<p>${esc(p.description)}</p>` : ""}<div class="fbx-pvr-row" data-panneau="${esc(cle)}"></div></div>`;
+          this._panneaux.push({ cle, chaine: a.channel_name, prog: p });
+        }
+        return this._jaquetteBrute({
+          poster: urlSure(p.poster || p.icon), logo: urlSure(a.channel_icon), nom: p.title, info, badges,
+          boutons: bouton, cls: [rec ? "enregistre" : "", this._choix === cle ? "choisie" : ""].join(" "), cle, pied,
+        });
+      }).filter(Boolean);
+      return this._rail(`g-${creneau}`, t.rangs[creneau], items, detail);
+    }).join("") || `<div class="msg">${esc(t.aucun_guide)}</div>`;
   }
 
   _carrousels(pvr) {
@@ -476,10 +563,12 @@ class FreeboxPvrCard extends HTMLElement {
     const chaines = this._chaines();
     this._panneaux = [];
 
-    const seulEnr = !!this._config.uniquement_enregistrements;
+    const carrousel = !!this._config[`carrousel_${this._onglet}`];
+    const seulEnr = this._config.vues.length === 1 && this._config.vues[0] === "enregistrements";
     let corps = "";
     if (!pvr) corps = `<div class="msg">${esc(t.aucune_pvr)}</div>`;
-    else if (seulEnr) corps = this._carrousels(pvr);
+    else if (carrousel && this._onglet === "enregistrements") corps = this._carrousels(pvr);
+    else if (carrousel && chaines.length) corps = this._carrouselGuide(pvr);
     else if (this._onglet === "enregistrements") {
       corps = this._ongletEnregistrements(pvr);
     } else if (!chaines.length) corps = `<div class="msg">${esc(t.aucun_guide)}</div>`;
@@ -496,18 +585,20 @@ class FreeboxPvrCard extends HTMLElement {
     }
 
     const nb = pvr ? Number(pvr.state) || 0 : 0;
-    const onglets = ["maintenant", "soir", "enregistrements"].map((o) =>
+    const onglets = this._config.vues.map((o) =>
       `<button class="onglet ${o === this._onglet ? "sel" : ""}" data-onglet="${o}">${esc(t.onglets[o])}${o === "enregistrements" && nb ? `<span class="nb">${nb}</span>` : ""}</button>`).join("");
 
     // Position de défilement des carrousels conservée d'un rendu à l'autre
     const defil = {};
     this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => { defil[r.dataset.railId] = r.scrollLeft; });
-    this.shadowRoot.innerHTML = `<style>${STYLE}${STYLE_SURCOUCHE}${STYLE_CARROUSEL}</style>
-      <ha-card>
+    const contenu = `${this._config.vues.length > 1 ? `<div class="onglets">${onglets}</div>` : ""}
+        <div class="${carrousel ? "carrousels" : "liste"}">${corps}</div>`;
+    this.shadowRoot.innerHTML = `<style>${STYLE}${STYLE_SURCOUCHE}${STYLE_CARROUSEL}</style>` + (this._config.integre
+      ? `<div class="integre">${contenu}</div>`
+      : `<ha-card>
         <div class="entete"><div class="titre-carte"><ha-icon icon="${seulEnr ? "mdi:record-rec" : "mdi:television-classic"}"></ha-icon>${esc(this._config.title || (seulEnr ? t.titre_enr : t.titre))}</div></div>
-        ${seulEnr ? "" : `<div class="onglets">${onglets}</div>`}
-        <div class="${seulEnr ? "carrousels" : "liste"}">${corps}</div>
-      </ha-card>`;
+        ${contenu}
+      </ha-card>`);
     this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => { if (defil[r.dataset.railId]) r.scrollLeft = defil[r.dataset.railId]; });
     this.shadowRoot.querySelectorAll(".fleche").forEach((b) => b.addEventListener("click", () => {
       const rail = this.shadowRoot.querySelector(`[data-rail-id="${b.dataset.rail}"]`);
@@ -533,7 +624,9 @@ class FreeboxPvrCard extends HTMLElement {
       ev.stopPropagation();
       const action = el.dataset.action, cle = el.dataset.cle;
       const conteneur = el.closest(".action");
-      if (action === "deplier") {
+      if (action === "deplier" && this._config[`carrousel_${this._onglet}`]) {
+        this._choix = this._choix === cle ? null : cle; this._signature = ""; this._rendu();
+      } else if (action === "deplier") {
         this._ouvert.has(cle) ? this._ouvert.delete(cle) : this._ouvert.add(cle);
         this._signature = ""; this._rendu();
       } else if (action === "enregistrer") {
@@ -548,6 +641,8 @@ class FreeboxPvrCard extends HTMLElement {
         this._arreter(el.dataset.id, conteneur.dataset.titre, cle);
       } else if (action === "svc") {
         this._service(el.dataset.svc, el.dataset.champ, el.dataset.id, el.dataset.titre, cle);
+      } else if (action === "choisir") {
+        this._choix = this._choix === cle ? null : cle; this._signature = ""; this._rendu();
       } else if (action === "tout") {
         this._tousFinis = true; this._signature = ""; this._rendu();
       }
@@ -601,6 +696,19 @@ const STYLE_CARROUSEL = `
     background: rgba(0,0,0,.55); color: #fff; font-size: 22px; line-height: 30px; padding: 0; }
   .fleche.g { left: 4px; } .fleche.d { right: 4px; }
   .fleche[hidden] { display: none; }
+  .jaq[data-action="choisir"] { cursor: pointer; }
+  .jaq.choisie .visuel { outline: 3px solid var(--primary-color); outline-offset: -3px; }
+  .jaq.enregistre .visuel { box-shadow: 0 0 0 2px #e53935 inset, 0 2px 6px rgba(0,0,0,.18); }
+  .jaq .logo-chaine { position: absolute; left: 6px; bottom: 8px; width: 30px; height: 30px; border-radius: 50%; background: #fff;
+    object-fit: contain; padding: 3px; box-sizing: border-box; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .jaq .progres { position: absolute; left: 0; right: 0; bottom: 0; height: 4px; background: rgba(255,255,255,.35); }
+  .jaq .progres div { height: 100%; background: #e53935; }
+  .jaq .actions .action { display: contents; }
+  .detail-carr { margin: 10px 16px 4px; padding: 10px 12px; border-radius: 12px; background: var(--secondary-background-color); font-size: .9em; }
+  .detail-carr .dc-titre { font-weight: 600; font-size: 1.05em; }
+  .detail-carr .dc-info { color: var(--secondary-text-color); font-size: .85em; margin-top: 2px; }
+  .detail-carr p { margin: 8px 0 0; }
+  .integre .onglets { padding-top: 4px; }
 `;
 
 const STYLE = `
@@ -686,10 +794,20 @@ class FreeboxPvrCardEditor extends HTMLElement {
       { name: "onglet", selector: { select: { mode: "dropdown", options: Object.entries(t.onglets).map(([value, label]) => ({ value, label })) } } },
       { name: "afficher_affiches", selector: { boolean: {} } },
       { name: "pvr_entity", selector: { entity: { filter: { integration: "freebox_pvr", domain: "sensor" } } } },
-      { name: "uniquement_enregistrements", selector: { boolean: {} } },
+      { type: "grid", name: "", schema: [
+        { name: "maintenant", selector: { boolean: {} } }, { name: "carrousel_maintenant", selector: { boolean: {} } },
+        { name: "soir", selector: { boolean: {} } }, { name: "carrousel_soir", selector: { boolean: {} } },
+        { name: "enregistrements", selector: { boolean: {} } }, { name: "carrousel_enregistrements", selector: { boolean: {} } },
+      ] },
       { name: "jaquettes", selector: { number: { min: 1, max: 4, step: 1, mode: "slider" } } },
     ];
-    this._form.data = { onglet: "soir", afficher_affiches: true, uniquement_enregistrements: false, jaquettes: 3, ...this._config };
+    const data = { onglet: "soir", afficher_affiches: true, jaquettes: 3, maintenant: true, soir: true, enregistrements: true,
+      carrousel_maintenant: false, carrousel_soir: false, carrousel_enregistrements: false, ...this._config };
+    if (data.uniquement_enregistrements) {
+      Object.assign(data, { maintenant: false, soir: false, enregistrements: true, carrousel_enregistrements: true });
+      delete data.uniquement_enregistrements;
+    }
+    this._form.data = data;
   }
 }
 
@@ -719,6 +837,7 @@ const SURCOUCHE = {
     envoi: "Envoi à la Freebox…", conflit: "Conflit avec un autre enregistrement", ok: "Enregistrement programmé.", deja: "Déjà programmé.", annule: "Enregistrement annulé.",
     fin: "Fin", lendemain: "le lendemain", chaque: "Chaque semaine", le: "le {j} à {h}", repete: "Chaque semaine, le {j} à {h}",
     arreter: "Arrêter la répétition", confirmer_arret: "Confirmer l'arrêt", arretee: "Répétition arrêtée.", ajouter_rep: "Répéter chaque semaine",
+    onglet: "Enregistrements",
     ok_rep: "Enregistrement programmé, répété chaque semaine.", rep_ajoutee: "Répétition ajoutée.", fin_invalide: "Heure de fin invalide.",
     en_pause: "Enregistrement en pause", pause: "Mettre en pause", reprendre: "Reprendre", stop: "Arrêter l'enregistrement", confirmer_stop: "Confirmer l'arrêt",
     pause_ok: "Enregistrement mis en pause.", reprise_ok: "Enregistrement repris.", stop_ok: "Enregistrement arrêté (la partie enregistrée est gardée).",
@@ -728,6 +847,7 @@ const SURCOUCHE = {
     envoi: "Sending to the Freebox…", conflit: "Conflicts with another recording", ok: "Recording scheduled.", deja: "Already scheduled.", annule: "Recording cancelled.",
     fin: "End", lendemain: "next day", chaque: "Every week", le: "on {j} at {h}", repete: "Every week, on {j} at {h}",
     arreter: "Stop repeating", confirmer_arret: "Confirm stop", arretee: "Repeat stopped.", ajouter_rep: "Repeat every week",
+    onglet: "Recordings",
     ok_rep: "Recording scheduled, repeated every week.", rep_ajoutee: "Repeat added.", fin_invalide: "Invalid end time.",
     en_pause: "Recording paused", pause: "Pause", reprendre: "Resume", stop: "Stop the recording", confirmer_stop: "Confirm stop",
     pause_ok: "Recording paused.", reprise_ok: "Recording resumed.", stop_ok: "Recording stopped (what was recorded is kept).",
@@ -955,8 +1075,97 @@ function installerSurcouche() {
       }
       return resultat;
     };
+    installerOnglet(proto);
     proto.__freeboxPvr = true;
   });
+}
+
+/* Onglet « Enregistrements » dans la carte Programme TNT FR, à côté de Carrousel / Guide TV.
+   Il affiche la vue Enregistrements de la carte Freebox PVR (en carrousel, au nombre de jaquettes
+   de la carte). Désactivable avec freebox_pvr: false dans la configuration de la carte. */
+function installerOnglet(proto) {
+  const requis = ["_ensureDom", "_updateHeaderButtons", "_renderBody"];
+  if (requis.some((m) => typeof proto[m] !== "function")) {
+    console.warn("Freebox PVR : la carte Programme TNT FR a changé, onglet Enregistrements désactivé.");
+    return;
+  }
+  const actif = (carte) => carte._config?.freebox_pvr !== false && carte._hass && capteurPvr(carte._hass, {});
+  const origDom = proto._ensureDom, origBoutons = proto._updateHeaderButtons, origCorps = proto._renderBody;
+
+  const ajouter = (carte) => {
+    try {
+      const els = carte._els;
+      const liens = els?.viewLinks || {};
+      const zone = Object.values(liens)[0]?.parentElement;
+      if (!els || !zone || (carte.__fbxBouton && carte.__fbxBouton.isConnected)) return;
+      const t = SURCOUCHE[langue(carte._hass)];
+      const bouton = document.createElement("button");
+      bouton.type = "button";
+      bouton.className = "header-guide-link fbx-onglet";
+      bouton.textContent = t.onglet;
+      bouton.hidden = true;
+      bouton.addEventListener("click", () => { carte.__fbxVue = true; carte._updateHeaderButtons(); carte._renderBody(); });
+      zone.appendChild(bouton);
+      // Un clic sur Carrousel / Guide TV / Top films quitte l'onglet Enregistrements
+      Object.values(liens).forEach((l) => l.addEventListener("click", () => { carte.__fbxVue = false; }, { capture: true }));
+      const racine = document.createElement("div");
+      racine.className = "fbx-racine";
+      racine.hidden = true;
+      (els.filmsRoot || els.guideRoot || els.body).after(racine);
+      carte.__fbxBouton = bouton;
+      carte.__fbxRacine = racine;
+      carte.__fbxCarte = null;
+    } catch (err) {
+      console.warn("Freebox PVR : onglet", err);
+    }
+  };
+
+  proto._ensureDom = function () {
+    const r = origDom.apply(this, arguments);
+    ajouter(this);
+    return r;
+  };
+
+  proto._updateHeaderButtons = function () {
+    const r = origBoutons.apply(this, arguments);
+    ajouter(this);  // carte affichée avant le chargement de Freebox PVR
+    const bouton = this.__fbxBouton;
+    if (!bouton) return r;
+    const visible = !!actif(this);
+    bouton.hidden = !visible;
+    bouton.textContent = SURCOUCHE[langue(this._hass)].onglet;
+    if (!visible) { this.__fbxVue = false; return r; }
+    // Avec l'onglet en plus, il y a toujours au moins deux vues : on montre aussi celles de la carte
+    const vues = typeof this._enabledViews === "function" ? this._enabledViews() : [];
+    Object.entries(this._els.viewLinks || {}).forEach(([cle, lien]) => {
+      if (vues.includes(cle)) lien.hidden = false;
+      if (this.__fbxVue) lien.classList.remove("active");
+    });
+    bouton.classList.toggle("active", !!this.__fbxVue);
+    return r;
+  };
+
+  proto._renderBody = function () {
+    const racine = this.__fbxRacine;
+    if (racine && this.__fbxVue && actif(this)) {
+      const els = this._els;
+      [els.body, els.guideRoot, els.filmsRoot].forEach((e) => { if (e) e.hidden = true; });
+      racine.hidden = false;
+      if (!this.__fbxCarte) {
+        const carte = document.createElement("freebox-pvr-card");
+        carte.setConfig({
+          maintenant: false, soir: false, enregistrements: true, carrousel_enregistrements: true, integre: true,
+          jaquettes: Math.min(4, Math.max(1, Number(this._config?.columns) || 2)),
+        });
+        racine.appendChild(carte);
+        this.__fbxCarte = carte;
+      }
+      this.__fbxCarte.hass = this._hass;
+      return undefined;
+    }
+    if (racine) racine.hidden = true;
+    return origCorps.apply(this, arguments);
+  };
 }
 installerSurcouche();
 

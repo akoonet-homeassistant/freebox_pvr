@@ -60,8 +60,11 @@ class ScheduledRecordsSensor(FreeboxPvrEntity, SensorEntity):
         records = self.coordinator.data.records
         repeats = self.coordinator.repeats
 
+        posters = self.coordinator.posters
+
         def _attr(rec: dict[str, Any]) -> dict[str, Any]:
             data = record_to_attr(rec)
+            data["poster"] = posters.find(rec.get("channel_uuid"), rec.get("channel_name"), rec.get("start"), rec.get("end"))
             rule = repeats.rule_for_record(rec.get("id"))
             data["repeat_id"] = rule["id"] if rule else None
             return data
@@ -154,6 +157,9 @@ class FinishedRecordsSensor(FreeboxPvrEntity, SensorEntity):
                 (rec.get("end", 0) - rec.get("start", 0)) if rec.get("end") and rec.get("start") else None
             )
             data["byte_size"] = rec.get("byte_size")
+            data["poster"] = self.coordinator.posters.find(
+                rec.get("channel_uuid"), rec.get("channel_name"), rec.get("start"), rec.get("end")
+            )
             items.append(data)
         return {
             "recordings": items,

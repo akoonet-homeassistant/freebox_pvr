@@ -14,7 +14,8 @@ from homeassistant.util import dt as dt_util
 
 from .api import FreeboxPvrClient, FreeboxPvrError, PermissionMissing
 from .const import CHANNELS_REFRESH, DOMAIN, SCAN_INTERVAL
-from .guide import async_check_guide
+from .guide import async_check_guide, guide_programs
+from .posters import PosterMemory
 from .repeat import RepeatManager
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ class FreeboxPvrCoordinator(DataUpdateCoordinator[PvrData]):
         )
         self.client = client
         self.repeats = RepeatManager(hass, entry.entry_id)
+        self.posters = PosterMemory(hass, entry.entry_id)
         self._channels: dict[str, dict[str, Any]] = {}
         self._channels_at: datetime | None = None
 
@@ -72,6 +74,12 @@ class FreeboxPvrCoordinator(DataUpdateCoordinator[PvrData]):
         except Exception as err:  # réseau, TLS…
             raise UpdateFailed(f"Freebox injoignable : {err}") from err
         records.sort(key=lambda r: r.get("start", 0))
+        # Affiches : retenues tant que le programme est dans le guide du jour
+        try:
+            self.posters.learn(records, guide_programs(self.hass, self))
+            await self.posters.async_save_if_needed()
+        except Exception:  # noqa: BLE001 — les affiches ne doivent jamais bloquer la mise à jour
+            _LOGGER.debug("Mémorisation des affiches impossible", exc_info=True)
         try:
             finished = await self.client.get_finished()
         except FreeboxPvrError as err:

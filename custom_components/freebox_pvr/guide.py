@@ -58,7 +58,7 @@ def notification_id(rule_id: str, occ_start: int) -> str:
 
 def guide_programs(hass: HomeAssistant, coordinator: FreeboxPvrCoordinator) -> dict[str, list[dict[str, Any]]]:
     """Programmes du guide (créneaux des capteurs Programme TNT FR), par identifiant de chaîne Freebox."""
-    channels = coordinator.data.channels if coordinator.data else {}
+    channels = getattr(coordinator, "_channels", None) or (coordinator.data.channels if coordinator.data else {})
     aliases = parse_aliases(coordinator.config_entry.options.get(CONF_CHANNEL_ALIASES))
     result: dict[str, list[dict[str, Any]]] = {}
     for entry in er.async_get(hass).entities.values():
