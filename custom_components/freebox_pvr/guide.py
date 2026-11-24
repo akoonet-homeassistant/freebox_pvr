@@ -91,6 +91,8 @@ async def async_check_guide(hass: HomeAssistant, coordinator: FreeboxPvrCoordina
     by_id = {r.get("id"): r for r in records}
     modified = save = False
     for rule in repeats.rules:
+        if rule.get("paused"):
+            continue
         for occ_start, occ_end in occurrences(rule, now, timedelta(hours=24)):
             if occ_start <= now_ts:
                 continue

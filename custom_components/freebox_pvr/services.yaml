@@ -142,3 +142,87 @@ refresh_channels:
       selector:
         config_entry:
           integration: freebox_pvr
+
+pause_record:
+  fields:
+    record_id:
+      required: true
+      example: 63
+      selector:
+        number:
+          min: 0
+          max: 1000000
+          mode: box
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freebox_pvr
+
+resume_record:
+  fields:
+    record_id:
+      required: true
+      example: 63
+      selector:
+        number:
+          min: 0
+          max: 1000000
+          mode: box
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freebox_pvr
+
+stop_record:
+  fields:
+    record_id:
+      required: true
+      example: 63
+      selector:
+        number:
+          min: 0
+          max: 1000000
+          mode: box
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freebox_pvr
+
+delete_finished:
+  fields:
+    record_id:
+      required: true
+      example: 12
+      selector:
+        number:
+          min: 0
+          max: 1000000
+          mode: box
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freebox_pvr
+
+pause_repeat:
+  fields:
+    repeat_id:
+      required: true
+      example: "a1b2c3d4"
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freebox_pvr
+
+resume_repeat:
+  fields:
+    repeat_id:
+      required: true
+      example: "a1b2c3d4"
+      selector:
+        text:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: freebox_pvr

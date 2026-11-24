@@ -316,5 +316,21 @@ class FreeboxPvrClient:
         """Change l'heure de fin d'un enregistrement programmé (timestamp, marge comprise)."""
         return await self.update_record(record, {"end": int(new_end)})
 
+    async def set_enabled(self, record: dict[str, Any], enabled: bool) -> dict[str, Any]:
+        """Met en pause (désactive) ou reprend un enregistrement programmé, sans le supprimer."""
+        return await self.update_record(record, {"enabled": bool(enabled)})
+
+    async def stop_record(self, record: dict[str, Any], now: int) -> dict[str, Any]:
+        """Arrête un enregistrement en cours en avançant sa fin à maintenant (la partie enregistrée est gardée)."""
+        return await self.update_record(record, {"end": int(now), "margin_after": 0})
+
+    async def get_finished(self) -> list[dict[str, Any]]:
+        data = await self._call(self.fbx.tv.get_finished_tv_records())
+        return data if isinstance(data, list) else []
+
+    async def delete_finished(self, record_id: int) -> None:
+        """Supprime un enregistrement terminé (et son fichier sur le disque)."""
+        await self._call(self.fbx.tv.delete_finished_tv_record(int(record_id)))
+
     async def delete_record(self, record_id: int) -> None:
         await self._call(self.fbx.tv.delete_programmed_tv_record(int(record_id)))

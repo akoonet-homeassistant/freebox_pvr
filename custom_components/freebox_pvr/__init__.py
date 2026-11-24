@@ -63,8 +63,15 @@ from .const import (
     SERVICE_CANCEL,
     SERVICE_RECORD,
     SERVICE_REFRESH_CHANNELS,
+    SERVICE_DELETE_FINISHED,
+    SERVICE_PAUSE_RECORD,
+    SERVICE_PAUSE_REPEAT,
+    SERVICE_RESUME_RECORD,
+    SERVICE_RESUME_REPEAT,
+    SERVICE_STOP_RECORD,
     SERVICE_STOP_REPEAT,
     SLOTS,
+    RUNNING_STATES,
     STATIC_URL,
     VERSION,
 )
@@ -261,7 +268,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 margin_before=int(margin_before), margin_after=int(margin_after), quality=quality,
                 first_record_id=record_id,
             )
-            await coordinator.async_request_refresh()  # programme la semaine suivante
+            await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état  # programme la semaine suivante
             return rule["id"]
 
         existing = find_record_for_program(records, uuid, start, end)
@@ -271,7 +278,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 new_end = int(end + int(margin_after) * 60)
                 if new_end != existing.get("end"):
                     await _guard(coordinator.client.update_record_end(existing, new_end))
-                    await coordinator.async_request_refresh()
+                    await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
             repeat_id = await _repeat(existing.get("id"))
             return {"record_id": existing.get("id"), "already_programmed": True, "channel_uuid": uuid, ATTR_REPEAT_ID: repeat_id}
 
@@ -292,7 +299,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         )
         result = await _guard(coordinator.client.create_record(request))
         repeat_id = await _repeat(result.get("id"))
-        await coordinator.async_request_refresh()
+        await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
         return {
             ATTR_REPEAT_ID: repeat_id,
             "record_id": result.get("id"),
@@ -326,7 +333,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 raise ServiceValidationError(translation_domain=DOMAIN, translation_key="record_not_found")
             record_id = rec["id"]
         await _guard(coordinator.client.delete_record(int(record_id)))
-        await coordinator.async_request_refresh()
+        await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
         return {"record_id": int(record_id), "cancelled": True}
 
     async def async_stop_repeat(call: ServiceCall) -> ServiceResponse:
@@ -344,13 +351,82 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                     await _guard(coordinator.client.delete_record(int(rec["id"])))
                     cancelled.append(int(rec["id"]))
         coordinator.async_update_listeners()
-        await coordinator.async_request_refresh()
+        await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
         return {ATTR_REPEAT_ID: rule["id"], "stopped": True, "cancelled": cancelled}
+
+    def _record(coordinator: FreeboxPvrCoordinator, record_id: int) -> dict[str, Any]:
+        rec = next((r for r in coordinator.data.records if r.get("id") == record_id), None)
+        if rec is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="record_id_not_found",
+                translation_placeholders={"record_id": str(record_id)},
+            )
+        return rec
+
+    async def async_pause_record(call: ServiceCall) -> ServiceResponse:
+        coordinator = _coordinator(call)
+        rec = _record(coordinator, call.data[ATTR_RECORD_ID])
+        if rec.get("state") in RUNNING_STATES:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="already_running")
+        await _guard(coordinator.client.set_enabled(rec, False))
+        await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
+        return {ATTR_RECORD_ID: rec["id"], "paused": True}
+
+    async def async_resume_record(call: ServiceCall) -> ServiceResponse:
+        coordinator = _coordinator(call)
+        rec = _record(coordinator, call.data[ATTR_RECORD_ID])
+        await _guard(coordinator.client.set_enabled(rec, True))
+        await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
+        return {ATTR_RECORD_ID: rec["id"], "paused": False}
+
+    async def async_stop_record(call: ServiceCall) -> ServiceResponse:
+        coordinator = _coordinator(call)
+        rec = _record(coordinator, call.data[ATTR_RECORD_ID])
+        if rec.get("state") not in RUNNING_STATES:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="not_running")
+        await _guard(coordinator.client.stop_record(rec, int(dt_util.utcnow().timestamp())))
+        await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
+        return {ATTR_RECORD_ID: rec["id"], "stopped": True}
+
+    async def async_delete_finished(call: ServiceCall) -> ServiceResponse:
+        coordinator = _coordinator(call)
+        record_id = call.data[ATTR_RECORD_ID]
+        if not any(r.get("id") == record_id for r in coordinator.data.finished):
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="record_id_not_found",
+                translation_placeholders={"record_id": str(record_id)},
+            )
+        await _guard(coordinator.client.delete_finished(record_id))
+        await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
+        return {ATTR_RECORD_ID: record_id, "deleted": True}
+
+    async def _set_repeat_paused(call: ServiceCall, paused: bool) -> ServiceResponse:
+        coordinator = _coordinator(call)
+        rule = await coordinator.repeats.async_set_paused(call.data[ATTR_REPEAT_ID], paused)
+        if rule is None:
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="repeat_not_found")
+        # Les épisodes déjà programmés par la répétition suivent la pause / la reprise
+        now = int(dt_util.utcnow().timestamp())
+        wanted = "waiting_start_time" if paused else "disabled"
+        changed: list[int] = []
+        for rec in coordinator.data.records:
+            if rec.get("id") in rule.get("record_ids", []) and rec.get("state") == wanted and rec.get("start", 0) > now:
+                await _guard(coordinator.client.set_enabled(rec, not paused))
+                changed.append(int(rec["id"]))
+        coordinator.async_update_listeners()
+        await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
+        return {ATTR_REPEAT_ID: rule["id"], "paused": paused, "records": changed}
+
+    async def async_pause_repeat(call: ServiceCall) -> ServiceResponse:
+        return await _set_repeat_paused(call, True)
+
+    async def async_resume_repeat(call: ServiceCall) -> ServiceResponse:
+        return await _set_repeat_paused(call, False)
 
     async def async_refresh_channels(call: ServiceCall) -> None:
         coordinator = _coordinator(call)
         await _guard(coordinator.async_refresh_channels())
-        await coordinator.async_request_refresh()
+        await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
 
     hass.services.async_register(
         DOMAIN, SERVICE_RECORD, async_record, schema=RECORD_SCHEMA, supports_response=SupportsResponse.OPTIONAL
@@ -358,6 +434,17 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.services.async_register(
         DOMAIN, SERVICE_CANCEL, async_cancel, schema=CANCEL_SCHEMA, supports_response=SupportsResponse.OPTIONAL
     )
+    record_id_schema = vol.Schema({vol.Required(ATTR_RECORD_ID): vol.Coerce(int), vol.Optional("config_entry_id"): cv.string})
+    repeat_id_schema = vol.Schema({vol.Required(ATTR_REPEAT_ID): cv.string, vol.Optional("config_entry_id"): cv.string})
+    for name, handler, schema in (
+        (SERVICE_PAUSE_RECORD, async_pause_record, record_id_schema),
+        (SERVICE_RESUME_RECORD, async_resume_record, record_id_schema),
+        (SERVICE_STOP_RECORD, async_stop_record, record_id_schema),
+        (SERVICE_DELETE_FINISHED, async_delete_finished, record_id_schema),
+        (SERVICE_PAUSE_REPEAT, async_pause_repeat, repeat_id_schema),
+        (SERVICE_RESUME_REPEAT, async_resume_repeat, repeat_id_schema),
+    ):
+        hass.services.async_register(DOMAIN, name, handler, schema=schema, supports_response=SupportsResponse.OPTIONAL)
     hass.services.async_register(
         DOMAIN,
         SERVICE_STOP_REPEAT,

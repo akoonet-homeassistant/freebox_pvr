@@ -142,6 +142,8 @@ class RepeatManager:
         now = dt_util.utcnow()
         created = changed = False
         for rule in self.rules:
+            if rule.get("paused"):
+                continue  # répétition en pause : aucun nouvel épisode n'est programmé
             for start, end in occurrences(rule, now):
                 if start in rule["done"]:
                     continue
@@ -188,6 +190,17 @@ class RepeatManager:
         if changed:
             await self.async_save()
         return created
+
+    def get(self, rule_id: str) -> dict[str, Any] | None:
+        return next((r for r in self.rules if r["id"] == rule_id), None)
+
+    async def async_set_paused(self, rule_id: str, paused: bool) -> dict[str, Any] | None:
+        rule = self.get(rule_id)
+        if rule is not None:
+            # À la reprise, les épisodes des 8 prochains jours sont programmés à la mise à jour suivante
+            rule["paused"] = bool(paused)
+            await self.async_save()
+        return rule
 
     def next_occurrence(self, rule: dict[str, Any]) -> int | None:
         occ = occurrences(rule, dt_util.utcnow(), timedelta(days=8))

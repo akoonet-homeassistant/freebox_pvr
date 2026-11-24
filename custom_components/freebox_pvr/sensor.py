@@ -14,6 +14,8 @@ from homeassistant.util import dt as dt_util
 from .api import ChannelNotFound, find_channel, parse_aliases
 from .const import (
     ACTIVE_STATES,
+    FINISHED_LIMIT,
+    UPCOMING_STATES,
     CONF_CHANNEL_ALIASES,
     CONF_MARGIN_AFTER,
     CONF_MARGIN_BEFORE,
@@ -24,14 +26,20 @@ from .const import (
 from .entity import FreeboxPvrEntity, record_to_attr
 
 
-def _upcoming(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return [r for r in records if r.get("state") in ACTIVE_STATES]
+def _upcoming(records: list[dict[str, Any]], with_paused: bool = False) -> list[dict[str, Any]]:
+    states = UPCOMING_STATES if with_paused else ACTIVE_STATES
+    now = int(dt_util.utcnow().timestamp())
+    return [r for r in records if r.get("state") in states and (r.get("state") != "disabled" or r.get("end", 0) > now)]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry, async_add_entities: AddConfigEntryEntitiesCallback) -> None:
     coordinator = entry.runtime_data
     async_add_entities(
-        [ScheduledRecordsSensor(coordinator, "scheduled_records"), NextRecordSensor(coordinator, "next_record")]
+        [
+            ScheduledRecordsSensor(coordinator, "scheduled_records"),
+            NextRecordSensor(coordinator, "next_record"),
+            FinishedRecordsSensor(coordinator, "finished_records"),
+        ]
     )
 
 
@@ -40,6 +48,8 @@ class ScheduledRecordsSensor(FreeboxPvrEntity, SensorEntity):
 
     _attr_icon = "mdi:record-rec"
     _attr_native_unit_of_measurement = None
+    # Listes potentiellement longues : pas d'historique dans la base (recorder)
+    _unrecorded_attributes = frozenset({"records", "repeats", "failed", "guide_channels", "margins"})
 
     @property
     def native_value(self) -> int:
@@ -57,7 +67,8 @@ class ScheduledRecordsSensor(FreeboxPvrEntity, SensorEntity):
             return data
 
         return {
-            "records": [_attr(r) for r in _upcoming(records)],
+            "records": [_attr(r) for r in _upcoming(records, with_paused=True)],
+            "paused": sum(1 for r in _upcoming(records, with_paused=True) if r.get("state") == "disabled"),
             "repeats": [
                 {
                     "id": rule["id"],
@@ -68,6 +79,7 @@ class ScheduledRecordsSensor(FreeboxPvrEntity, SensorEntity):
                     "time": rule["time"],
                     "duration": rule["duration"],
                     "next_start_ts": repeats.next_occurrence(rule),
+                    "paused": bool(rule.get("paused")),
                 }
                 for rule in repeats.rules
             ],
@@ -120,3 +132,30 @@ class NextRecordSensor(FreeboxPvrEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         rec = self._next()
         return record_to_attr(rec) if rec else {}
+
+
+class FinishedRecordsSensor(FreeboxPvrEntity, SensorEntity):
+    """Enregistrements terminés sur le disque de la Freebox (les plus récents en attribut)."""
+
+    _attr_icon = "mdi:filmstrip-box-multiple"
+    _unrecorded_attributes = frozenset({"recordings", "total_size"})
+
+    @property
+    def native_value(self) -> int:
+        return len(self.coordinator.data.finished)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        finished = self.coordinator.data.finished
+        items = []
+        for rec in finished[:FINISHED_LIMIT]:
+            data = record_to_attr(rec)
+            data["duration"] = rec.get("duration") or (
+                (rec.get("end", 0) - rec.get("start", 0)) if rec.get("end") and rec.get("start") else None
+            )
+            data["byte_size"] = rec.get("byte_size")
+            items.append(data)
+        return {
+            "recordings": items,
+            "total_size": sum(int(r.get("byte_size") or 0) for r in finished),
+        }

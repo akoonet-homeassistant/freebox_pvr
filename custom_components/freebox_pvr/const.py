@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 DOMAIN = "freebox_pvr"
-VERSION = "2026.11.7"
+VERSION = "2026.11.8"
 
 # Description de l'application envoyée à la Freebox. Elle doit rester FIXE :
 # freebox_api redemande une autorisation sur l'écran du Server dès qu'elle change
@@ -42,6 +42,9 @@ SLOTS = ["current", "next", "prime_time", "second_part"]
 
 # États d'un enregistrement programmé (API Freebox OS)
 ACTIVE_STATES = {"waiting_start_time", "starting", "running"}
+# Enregistrements affichés « à venir » : actifs + en pause (désactivés)
+UPCOMING_STATES = ACTIVE_STATES | {"disabled"}
+FINISHED_LIMIT = 50  # enregistrements terminés exposés dans les attributs
 RUNNING_STATES = {"starting", "running"}
 
 ATTR_RECORD_ID = "record_id"
@@ -60,3 +63,9 @@ SERVICE_RECORD = "record"
 SERVICE_CANCEL = "cancel"
 SERVICE_REFRESH_CHANNELS = "refresh_channels"
 SERVICE_STOP_REPEAT = "stop_repeat"
+SERVICE_PAUSE_RECORD = "pause_record"
+SERVICE_RESUME_RECORD = "resume_record"
+SERVICE_STOP_RECORD = "stop_record"
+SERVICE_DELETE_FINISHED = "delete_finished"
+SERVICE_PAUSE_REPEAT = "pause_repeat"
+SERVICE_RESUME_REPEAT = "resume_repeat"

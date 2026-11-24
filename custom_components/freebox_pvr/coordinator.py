@@ -23,6 +23,7 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass
 class PvrData:
     records: list[dict[str, Any]] = field(default_factory=list)
+    finished: list[dict[str, Any]] = field(default_factory=list)
     channels: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
@@ -71,4 +72,10 @@ class FreeboxPvrCoordinator(DataUpdateCoordinator[PvrData]):
         except Exception as err:  # réseau, TLS…
             raise UpdateFailed(f"Freebox injoignable : {err}") from err
         records.sort(key=lambda r: r.get("start", 0))
-        return PvrData(records=records, channels=self._channels)
+        try:
+            finished = await self.client.get_finished()
+        except FreeboxPvrError as err:
+            _LOGGER.debug("Enregistrements terminés non lisibles : %s", err)
+            finished = self.data.finished if self.data else []
+        finished.sort(key=lambda r: r.get("start", 0), reverse=True)
+        return PvrData(records=records, channels=self._channels, finished=finished)
