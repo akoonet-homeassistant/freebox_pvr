@@ -66,6 +66,9 @@
       },
       "next_record": {
         "name": "Prochain enregistrement"
+      },
+      "finished_records": {
+        "name": "Enregistrements terminés"
       }
     },
     "binary_sensor": {
@@ -193,6 +196,90 @@
         }
       }
     },
+    "pause_record": {
+      "name": "Mettre en pause un enregistrement",
+      "description": "Désactive un enregistrement programmé sans le supprimer.",
+      "fields": {
+        "record_id": {
+          "name": "Identifiant d'enregistrement",
+          "description": "Identifiant de l'enregistrement programmé (voir les attributs du capteur)."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Utile seulement si plusieurs Freebox sont configurées."
+        }
+      }
+    },
+    "resume_record": {
+      "name": "Reprendre un enregistrement",
+      "description": "Réactive un enregistrement mis en pause.",
+      "fields": {
+        "record_id": {
+          "name": "Identifiant d'enregistrement",
+          "description": "Identifiant de l'enregistrement programmé (voir les attributs du capteur)."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Utile seulement si plusieurs Freebox sont configurées."
+        }
+      }
+    },
+    "stop_record": {
+      "name": "Arrêter un enregistrement en cours",
+      "description": "Termine l'enregistrement maintenant ; la partie déjà enregistrée est gardée.",
+      "fields": {
+        "record_id": {
+          "name": "Identifiant d'enregistrement",
+          "description": "Identifiant de l'enregistrement programmé (voir les attributs du capteur)."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Utile seulement si plusieurs Freebox sont configurées."
+        }
+      }
+    },
+    "delete_finished": {
+      "name": "Supprimer un enregistrement terminé",
+      "description": "Supprime un enregistrement terminé et son fichier du disque de la Freebox.",
+      "fields": {
+        "record_id": {
+          "name": "Identifiant d'enregistrement",
+          "description": "Identifiant de l'enregistrement programmé (voir les attributs du capteur)."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Utile seulement si plusieurs Freebox sont configurées."
+        }
+      }
+    },
+    "pause_repeat": {
+      "name": "Mettre en pause une répétition",
+      "description": "Plus aucun épisode n'est programmé ; les épisodes déjà programmés sont aussi mis en pause.",
+      "fields": {
+        "repeat_id": {
+          "name": "Identifiant de répétition",
+          "description": "Identifiant de la répétition (voir l'attribut repeats du capteur)."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Utile seulement si plusieurs Freebox sont configurées."
+        }
+      }
+    },
+    "resume_repeat": {
+      "name": "Reprendre une répétition",
+      "description": "Les épisodes sont de nouveau programmés ; les épisodes en pause reprennent.",
+      "fields": {
+        "repeat_id": {
+          "name": "Identifiant de répétition",
+          "description": "Identifiant de la répétition (voir l'attribut repeats du capteur)."
+        },
+        "config_entry_id": {
+          "name": "Freebox",
+          "description": "Utile seulement si plusieurs Freebox sont configurées."
+        }
+      }
+    },
     "refresh_channels": {
       "name": "Actualiser les chaînes",
       "description": "Recharge la liste des chaînes de la Freebox.",
@@ -234,6 +321,15 @@
     },
     "permission_missing": {
       "message": "L'application n'a pas le droit sur les enregistrements TV (PVR) dans Freebox OS."
+    },
+    "record_id_not_found": {
+      "message": "Enregistrement {record_id} introuvable."
+    },
+    "not_running": {
+      "message": "Cet enregistrement n'est pas en cours."
+    },
+    "already_running": {
+      "message": "Cet enregistrement est en cours : arrêtez-le plutôt."
     },
     "repeat_not_found": {
       "message": "Répétition introuvable."
