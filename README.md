@@ -167,6 +167,7 @@ pvr_entity: sensor.freebox_pvr_enregistrements_programmes   # facultatif : trouv
 ```
 
 - **Maintenant** : programme en cours (avec sa progression) et suivant. **Ce soir** : première et deuxième partie de soirée. **Enregistrements** : la liste de la Freebox, avec leur état et les conflits.
+- **Choisir le soir** (onglet *Ce soir*) : les flèches ‹ › passent au soir précédent ou suivant, et un appui sur la date ouvre le calendrier, de ce soir à 7 jours plus tard. Pour les autres soirs, la carte lit le guide complet de Programme TNT FR et retient les mêmes programmes que lui (celui diffusé à 21 h 15 pour la 1re partie, à 22 h 40 pour la 2e). L'enregistrement fonctionne comme pour ce soir. Si le guide ne couvre pas encore ce soir-là, la carte l'indique.
 - **Bouton d'enregistrement** (rond rouge) : un appui programme l'enregistrement. Le programme passe en rouge quand il est enregistré (la Freebox fait foi). Un nouvel appui propose « Annuler ? » pendant 4 secondes ; un 2e appui annule.
 - Bouton grisé : la chaîne n'a pas été trouvée sur la Freebox ; ajoutez une correspondance dans les options de l'intégration.
 - Un appui sur un programme affiche son résumé, sa note, son affiche, et les réglages d'enregistrement (heure de fin, chaque semaine) comme dans la fiche Programme TNT FR.
@@ -206,6 +207,7 @@ pvr_entity: sensor.freebox_pvr_enregistrements_programmes   # facultatif : trouv
 | **Enregistrements à venir** — en cours, en pause, prévus, répétitions<br>![À venir](docs/screenshots/enregistrements.png) | **Enregistrements terminés** — sur le disque de la Freebox<br>![Terminés](docs/screenshots/termines.png) |
 | **Annulation** — confirmation en un appui<br>![Annulation](docs/screenshots/annulation.png) | **Détail d'un programme** — réglages d'enregistrement<br>![Détail](docs/screenshots/carte_detail.png) |
 | **Maintenant en carrousel** — détail et réglages d'une jaquette<br>![Maintenant](docs/screenshots/carrousel_maintenant.png) | **Ce soir en carrousel**<br>![Ce soir](docs/screenshots/carrousel_soir.png) |
+| **Ce soir — choix du soir** : demain soir<br>![Choix du soir](docs/screenshots/choix_soir.png) | **Autre soir en carrousel**, avec le détail d'un programme<br>![Autre soir](docs/screenshots/choix_soir_carrousel.png) |
 | **Enregistrements en carrousel** — affiches retrouvées pour les terminés<br>![Carrousel](docs/screenshots/carrousel_enregistrements.png) | **Enregistrements en carrousel** — thème sombre<br>![Carrousel sombre](docs/screenshots/carrousel_sombre.png) |
 | **Thème sombre**<br>![Sombre](docs/screenshots/sombre.png) | |
 | **En anglais**<br>![English](docs/screenshots/english.png) | |
@@ -413,6 +415,7 @@ pvr_entity: sensor.freebox_pvr_scheduled_recordings   # optional: found automati
 ```
 
 - **Now**: current program (with progress) and next. **Tonight**: prime time and second part. **Recordings**: the Freebox list, with state and conflicts.
+- **Choose the night** (*Tonight* tab): the ‹ › arrows go to the previous or next night, and tapping the date opens the calendar, from tonight up to 7 days ahead. For other nights, the card reads the full Programme TNT FR guide and picks the same programs it does (the one airing at 21:15 for prime time, at 22:40 for the second part). Recording works as for tonight. If the guide does not cover that night yet, the card says so.
 - **Record button** (red circle): one tap schedules the recording. The program turns red once recorded (the Freebox is the reference). Another tap shows "Cancel?" for 4 seconds; a second tap cancels.
 - Greyed button: the channel was not found on the Freebox; add a match in the integration options.
 - Tapping a program shows its summary, rating, poster, and the recording settings (end time, every week) as in the Programme TNT FR sheet.

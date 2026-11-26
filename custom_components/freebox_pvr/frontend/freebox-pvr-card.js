@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.12";
+const VERSION_CARTE = "2026.11.13";
 
 const TEXTES = {
   fr: {
@@ -27,6 +27,8 @@ const TEXTES = {
     ok_arret: "Répétition arrêtée : {t}",
     rangs: { current: "En ce moment", next: "Ensuite", prime_time: "1re partie de soirée", second_part: "2e partie de soirée" },
     direct: "Direct",
+    ce_soir: "Ce soir", demain_soir: "Demain soir", choisir_date: "Choisir la date", jour_prec: "Soir précédent", jour_suiv: "Soir suivant",
+    chargement: "Chargement du guide…", hors_guide: "Le guide ne couvre pas encore ce soir-là.",
     titre_enr: "Enregistrements", rang_avenir: "En cours et à venir", rang_rep: "Répétitions chaque semaine", rang_finis: "Terminés",
     rien: "Aucun enregistrement.", precedent: "Précédent", suivant: "Suivant",
     a_venir: "À venir", termines: "Terminés", aucun_termine: "Aucun enregistrement terminé sur la Freebox.", tout_afficher: "Tout afficher ({n})",
@@ -69,6 +71,8 @@ const TEXTES = {
     ok_arret: "Repeat stopped: {t}",
     rangs: { current: "Now on TV", next: "Next", prime_time: "Prime time", second_part: "Second part" },
     direct: "Live",
+    ce_soir: "Tonight", demain_soir: "Tomorrow night", choisir_date: "Choose the date", jour_prec: "Previous night", jour_suiv: "Next night",
+    chargement: "Loading the guide…", hors_guide: "The guide does not cover that night yet.",
     titre_enr: "Recordings", rang_avenir: "Recording and upcoming", rang_rep: "Weekly repeats", rang_finis: "Finished",
     rien: "No recording.", precedent: "Previous", suivant: "Next",
     a_venir: "Upcoming", termines: "Finished", aucun_termine: "No finished recording on the Freebox.", tout_afficher: "Show all ({n})",
@@ -93,6 +97,35 @@ const TEXTES = {
 const ONGLETS = { maintenant: ["current", "next"], soir: ["prime_time", "second_part"] };
 const VUES = ["maintenant", "soir", "enregistrements"];
 const GUIDE = "programme_tnt_fr";
+const JOURS_MAX = 7;                  // « Ce soir » : jusqu'à 7 soirs à l'avance
+const DEBUT_JOURNEE = 5;              // comme Programme TNT FR : une journée de diffusion va de 5 h à 5 h
+const SEUILS_SOIR = { prime_time: [21, 15], second_part: [22, 40] };  // mêmes repères que Programme TNT FR
+
+/** Date ISO locale (AAAA-MM-JJ). */
+const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** Journée de diffusion en cours (avant 5 h, c'est encore la soirée de la veille), décalée de `decalage` jours. */
+function journeeDiffusion(decalage = 0) {
+  const d = new Date();
+  if (d.getHours() < DEBUT_JOURNEE) d.setDate(d.getDate() - 1);
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() + decalage);
+  return d;
+}
+
+/** 1re et 2e partie de soirée d'une liste de programmes, comme Programme TNT FR les calcule. */
+function soireeDepuisProgrammes(progs, jour) {
+  const liste = (progs || []).filter((p) => p && p.title && ts(p.start)).sort((a, b) => ts(a.start) - ts(b.start));
+  const a = (h, m) => { const d = new Date(jour); d.setHours(h, m, 0, 0); return d.getTime() / 1000; };
+  const programmeA = ([h, m]) => {
+    const seuil = a(h, m);
+    return liste.find((p) => ts(p.start) <= seuil && seuil < ts(p.stop || p.end)) || liste.find((p) => ts(p.start) >= seuil) || null;
+  };
+  const prime = programmeA(SEUILS_SOIR.prime_time);
+  let seconde = programmeA(SEUILS_SOIR.second_part);
+  if (seconde && prime && seconde === prime) seconde = liste.find((p) => ts(p.start) > ts(prime.start)) || null;
+  return { prime_time: prime, second_part: seconde };
+}
 
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const langue = (hass) => (String(hass?.locale?.language || hass?.language || "fr").startsWith("fr") ? "fr" : "en");
@@ -144,6 +177,8 @@ class FreeboxPvrCard extends HTMLElement {
     this._signature = "";
     this._etats = {};           // état des panneaux d'enregistrement (heure de fin, chaque semaine…)
     this._panneaux = [];
+    this._jour = 0;             // « Ce soir » : 0 = ce soir, 1 = demain soir…
+    this._soirees = {};         // guide des autres soirs, par date : { entité: { prime_time, second_part } } ou null pendant le chargement
   }
 
   setConfig(config) {
@@ -192,8 +227,57 @@ class FreeboxPvrCard extends HTMLElement {
     parts.push(pvr ? this._hass.states[pvr]?.last_updated : "");
     const fini = capteurTermines(this._hass);
     parts.push(fini ? this._hass.states[fini]?.last_updated : "");
-    parts.push(langue(this._hass), Math.floor(Date.now() / 60000)); // rafraîchit la barre de progression chaque minute
+    parts.push(langue(this._hass), Math.floor(Date.now() / 60000), this._jour); // rafraîchit la barre de progression chaque minute
     return parts.join("|");
+  }
+
+  /** Programme d'un créneau pour une chaîne : capteur pour aujourd'hui, guide complet pour un autre soir. */
+  _creneau(entite, creneau) {
+    const a = this._hass.states[entite]?.attributes || {};
+    if (!this._autreSoir(creneau)) return a[creneau];
+    const soirees = this._soirees[isoLocal(journeeDiffusion(this._jour))];
+    return soirees ? soirees[entite]?.[creneau] || null : null;
+  }
+
+  _autreSoir(creneau) { return this._jour > 0 && (creneau === "prime_time" || creneau === "second_part"); }
+
+  /** Charge (une fois) le guide complet du soir choisi pour toutes les chaînes affichées. */
+  _chargerSoir() {
+    if (this._jour <= 0) return "pret";
+    const jour = journeeDiffusion(this._jour), date = isoLocal(jour);
+    if (date in this._soirees) return this._soirees[date] ? "pret" : "attente";
+    const chaines = this._chaines();
+    const ids = chaines.map((e) => this._hass.states[e]?.attributes?.channel_id).filter(Boolean);
+    this._soirees[date] = null;
+    this._hass.callWS({ type: "programme_tnt_fr/programmes", channels: ids, date })
+      .then((rep) => {
+        const progs = rep?.programmes || {};
+        const res = {};
+        for (const e of chaines) {
+          const id = this._hass.states[e]?.attributes?.channel_id;
+          if (id && progs[id]) res[e] = soireeDepuisProgrammes(progs[id], jour);
+        }
+        this._soirees[date] = res;
+      })
+      .catch(() => { this._soirees[date] = {}; })
+      .finally(() => { this._signature = ""; this._rendu(); });
+    return "attente";
+  }
+
+  /** Barre de choix du soir : ‹ Ce soir › ; un appui sur la date ouvre le calendrier. */
+  _barreDate() {
+    const t = this._t();
+    const jour = journeeDiffusion(this._jour);
+    const loc = langue(this._hass) === "fr" ? "fr-FR" : "en-GB";
+    let libelle = this._jour === 0 ? t.ce_soir : this._jour === 1 ? t.demain_soir : jour.toLocaleDateString(loc, { weekday: "long", day: "numeric", month: "long" });
+    libelle = libelle.charAt(0).toUpperCase() + libelle.slice(1);
+    const min = isoLocal(journeeDiffusion(0)), max = isoLocal(journeeDiffusion(JOURS_MAX));
+    return `<div class="barre-date">
+      <button class="jour" data-jour="-1" ${this._jour <= 0 ? "disabled" : ""} aria-label="${esc(t.jour_prec)}" title="${esc(t.jour_prec)}">‹</button>
+      <button class="date-lib" data-action="calendrier" title="${esc(t.choisir_date)}"><ha-icon icon="mdi:calendar-month-outline"></ha-icon><span>${esc(libelle)}</span></button>
+      <input type="date" class="date-cachee" min="${min}" max="${max}" value="${isoLocal(jour)}" tabindex="-1" aria-hidden="true">
+      <button class="jour" data-jour="1" ${this._jour >= JOURS_MAX ? "disabled" : ""} aria-label="${esc(t.jour_suiv)}" title="${esc(t.jour_suiv)}">›</button>
+    </div>`;
   }
 
   _heure(sec) {
@@ -214,7 +298,15 @@ class FreeboxPvrCard extends HTMLElement {
     const t = this._t();
     this._attente.add(cle); this._signature = ""; this._rendu();
     try {
-      const rep = await this._hass.callService("freebox_pvr", "record", { entity_id: entite, slot: creneau }, undefined, false, true);
+      let donnees = { entity_id: entite, slot: creneau };
+      if (this._autreSoir(creneau)) {
+        // Autre soir : le capteur ne connaît que ce soir, on envoie la chaîne et les horaires du guide
+        const p = this._creneau(entite, creneau);
+        if (!p) throw new Error(t.hors_guide);
+        donnees = { channel_name: this._hass.states[entite].attributes.channel_name, title: p.title, start: p.start, end: p.stop || p.end };
+        if (p.subtitle) donnees.subtitle = p.subtitle;
+      }
+      const rep = await this._hass.callService("freebox_pvr", "record", donnees, undefined, false, true);
       const r = rep?.response || {};
       this._notifier((r.already_programmed ? t.deja : t.ok_enr).replace("{t}", titre));
     } catch (err) {
@@ -421,13 +513,13 @@ class FreeboxPvrCard extends HTMLElement {
       let detail = "";
       const items = this._chaines().map((e) => {
         const a = this._hass.states[e].attributes;
-        const p = a[creneau];
+        const p = this._creneau(e, creneau);
         if (!p || !p.title) return "";
         const uuid = mapping[a.channel_name] ?? null;
         const debut = ts(p.start), fin = ts(p.stop || p.end);
         if (fin && fin <= maintenant) return "";
         const rec = enregistrementPour(records, uuid, debut, fin);
-        const cle = `${e}|${creneau}`;
+        const cle = this._cle(e, creneau);
         const enDirect = debut && fin && debut <= maintenant && maintenant < fin;
         const badges = (enDirect ? `<span class="b rouge">${esc(t.direct)}</span>` : "")
           + (rec ? `<span class="b ${rec.state === "disabled" ? "gris" : "rouge"}">${esc(t.etats[rec.state] || rec.state)}</span>` : "")
@@ -515,9 +607,12 @@ class FreeboxPvrCard extends HTMLElement {
     return `<button class="rec" data-action="enregistrer" data-cle="${esc(cle)}" title="${esc(t.enregistrer)}"><ha-icon icon="mdi:record-circle-outline"></ha-icon></button>`;
   }
 
+  /** Clé d'un programme affiché (le soir choisi en fait partie : détail et réglages propres à chaque soir). */
+  _cle(entite, creneau) { return this._autreSoir(creneau) ? `${entite}|${creneau}|${this._jour}` : `${entite}|${creneau}`; }
+
   _ligneProgramme(entite, creneau, p, uuid, records, principal) {
     const t = this._t();
-    const cle = `${entite}|${creneau}`;
+    const cle = this._cle(entite, creneau);
     if (!p || !p.title) {
       return `<div class="prog vide"><span class="cren">${esc(t.creneaux[creneau])}</span><span class="titre muted">${esc(t.pas_de_programme)}</span></div>`;
     }
@@ -571,7 +666,12 @@ class FreeboxPvrCard extends HTMLElement {
     const carrousel = !!this._config[`carrousel_${this._onglet}`];
     const seulEnr = this._config.vues.length === 1 && this._config.vues[0] === "enregistrements";
     let corps = "";
+    const soir = this._onglet === "soir" && pvr && chaines.length;
+    const etatSoir = soir ? this._chargerSoir() : "pret";
+    const soirVide = soir && etatSoir === "pret" && this._jour > 0 && !Object.keys(this._soirees[isoLocal(journeeDiffusion(this._jour))] || {}).length;
     if (!pvr) corps = `<div class="msg">${esc(t.aucune_pvr)}</div>`;
+    else if (etatSoir === "attente") corps = `<div class="msg">${esc(t.chargement)}</div>`;
+    else if (soirVide) corps = `<div class="msg">${esc(t.hors_guide)}</div>`;
     else if (carrousel && this._onglet === "enregistrements") corps = this._carrousels(pvr);
     else if (carrousel && chaines.length) corps = this._carrouselGuide(pvr);
     else if (this._onglet === "enregistrements") {
@@ -583,8 +683,8 @@ class FreeboxPvrCard extends HTMLElement {
         const a = this._hass.states[e].attributes;
         const uuid = mapping[a.channel_name] ?? null;
         return `<div class="chaine">${this._logo(a)}<div class="progs">
-          ${this._ligneProgramme(e, c1, a[c1], uuid, records, true)}
-          ${this._ligneProgramme(e, c2, a[c2], uuid, records, false)}
+          ${this._ligneProgramme(e, c1, this._creneau(e, c1), uuid, records, true)}
+          ${this._ligneProgramme(e, c2, this._creneau(e, c2), uuid, records, false)}
         </div></div>`;
       }).join("");
     }
@@ -597,6 +697,7 @@ class FreeboxPvrCard extends HTMLElement {
     const defil = {};
     this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => { defil[r.dataset.railId] = r.scrollLeft; });
     const contenu = `${this._config.vues.length > 1 ? `<div class="onglets">${onglets}</div>` : ""}
+        ${soir ? this._barreDate() : ""}
         <div class="${carrousel ? "carrousels" : "liste"}">${corps}</div>`;
     this.shadowRoot.innerHTML = `<style>${STYLE}${STYLE_SURCOUCHE}${STYLE_CARROUSEL}</style>` + (this._config.integre
       ? `<div class="integre">${contenu}</div>`
@@ -648,10 +749,27 @@ class FreeboxPvrCard extends HTMLElement {
         this._service(el.dataset.svc, el.dataset.champ, el.dataset.id, el.dataset.titre, cle);
       } else if (action === "choisir") {
         this._choix = this._choix === cle ? null : cle; this._signature = ""; this._rendu();
+      } else if (action === "calendrier") {
+        const champ = this.shadowRoot.querySelector(".date-cachee");
+        if (champ) { try { champ.showPicker ? champ.showPicker() : champ.click(); } catch (_e) { champ.focus(); } }
       } else if (action === "tout") {
         this._tousFinis = true; this._signature = ""; this._rendu();
       }
     }));
+    // Choix du soir
+    const changerJour = (n) => {
+      const j = Math.max(0, Math.min(JOURS_MAX, n));
+      if (j === this._jour) return;
+      this._jour = j; this._choix = null; this._confirmer = null; this._signature = ""; this._rendu();
+    };
+    this.shadowRoot.querySelectorAll("[data-jour]").forEach((b) => b.addEventListener("click", () => changerJour(this._jour + Number(b.dataset.jour))));
+    const champDate = this.shadowRoot.querySelector(".date-cachee");
+    if (champDate) champDate.addEventListener("change", () => {
+      if (!champDate.value) return;
+      const [y, m, d] = champDate.value.split("-").map(Number);
+      const choisi = new Date(y, m - 1, d, 12), base = journeeDiffusion(0);
+      changerJour(Math.round((choisi - base) / 86400000));
+    });
     this.shadowRoot.querySelectorAll("[data-sous]").forEach((b) => b.addEventListener("click", () => {
       this._sous = b.dataset.sous; this._confirmer = null; this._signature = ""; this._rendu();
     }));
@@ -727,6 +845,15 @@ const STYLE = `
   .onglet.sel { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
   .nb { background: #e53935; color: #fff; border-radius: 10px; font-size: .75em; padding: 0 6px; line-height: 16px; }
   .liste { padding: 0 8px 8px; }
+  .barre-date { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 0 16px 8px; position: relative; }
+  .barre-date .jour { border: 1px solid var(--divider-color); background: none; color: var(--primary-text-color); border-radius: 50%;
+    width: 30px; height: 30px; font-size: 1.2em; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+  .barre-date .jour:disabled { opacity: .3; cursor: default; }
+  .barre-date .date-lib { border: none; background: none; color: var(--primary-text-color); font: inherit; font-weight: 500; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 16px; min-width: 11em; justify-content: center; }
+  .barre-date .date-lib:hover { background: var(--secondary-background-color); }
+  .barre-date .date-lib ha-icon { --mdc-icon-size: 18px; color: var(--primary-color); }
+  .barre-date .date-cachee { position: absolute; left: 50%; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }
   .chaine { display: flex; gap: 10px; padding: 8px; border-top: 1px solid var(--divider-color); }
   .chaine:first-child { border-top: none; }
   .logo { flex: 0 0 44px; height: 44px; border-radius: 8px; background: var(--secondary-background-color);
