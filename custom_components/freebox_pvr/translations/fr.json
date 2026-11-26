@@ -336,6 +336,15 @@
     },
     "api_error": {
       "message": "Erreur Freebox : {error}"
+    },
+    "token_missing": {
+      "message": "Jeton d'application Freebox introuvable : supprimez puis ajoutez de nouveau l'intégration."
+    }
+  },
+  "issues": {
+    "permission_missing": {
+      "title": "Freebox PVR : droit sur les enregistrements TV retiré",
+      "description": "La Freebox ({host}) refuse l'accès aux enregistrements TV pour l'application « Home Assistant - Freebox PVR ».\n\nDans Freebox OS, ouvrez Paramètres de la Freebox > Gestion des accès > onglet Applications, modifiez « Home Assistant - Freebox PVR » et cochez le droit sur les **enregistrements TV (PVR)**.\n\nInutile de reconfigurer : l'intégration repart d'elle-même en quelques minutes et ce message disparaît."
     }
   }
 }

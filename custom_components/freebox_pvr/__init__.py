@@ -24,8 +24,8 @@ from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceValidationError,
 )
-from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.storage import STORAGE_DIR
+from homeassistant.helpers import config_validation as cv, issue_registry as ir
+from homeassistant.helpers.storage import STORAGE_DIR, Store
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.util import dt as dt_util
 
@@ -87,15 +87,19 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 type FreeboxPvrConfigEntry = ConfigEntry[FreeboxPvrCoordinator]
 
 _DATETIME = vol.Any(cv.datetime, cv.positive_int)
+# Limites des textes reçus par les actions (la Freebox tronque de toute façon le nom à 255)
+_NAME = vol.All(cv.string, vol.Length(min=1, max=255))
+_SHORT = vol.All(cv.string, vol.Length(min=1, max=100))
+_ENTRY = vol.All(cv.string, vol.Length(max=64))
 
 RECORD_SCHEMA = vol.Schema(
     {
         vol.Optional(ATTR_ENTITY_ID): cv.entity_id,
         vol.Optional(ATTR_SLOT, default="current"): vol.In(SLOTS),
-        vol.Optional(ATTR_CHANNEL_NAME): cv.string,
-        vol.Optional(ATTR_CHANNEL_UUID): cv.string,
-        vol.Optional(ATTR_TITLE): cv.string,
-        vol.Optional(ATTR_SUBTITLE): vol.Any(None, cv.string),
+        vol.Optional(ATTR_CHANNEL_NAME): _SHORT,
+        vol.Optional(ATTR_CHANNEL_UUID): _SHORT,
+        vol.Optional(ATTR_TITLE): _NAME,
+        vol.Optional(ATTR_SUBTITLE): vol.Any(None, "", _NAME),
         vol.Optional(ATTR_START): _DATETIME,
         vol.Optional(ATTR_END): _DATETIME,
         vol.Optional(ATTR_END_TIME): cv.time,
@@ -103,19 +107,19 @@ RECORD_SCHEMA = vol.Schema(
         vol.Optional(CONF_MARGIN_BEFORE): vol.All(vol.Coerce(int), vol.Range(min=0, max=60)),
         vol.Optional(CONF_MARGIN_AFTER): vol.All(vol.Coerce(int), vol.Range(min=0, max=120)),
         vol.Optional(CONF_QUALITY): vol.In(QUALITIES),
-        vol.Optional("config_entry_id"): cv.string,
+        vol.Optional("config_entry_id"): _ENTRY,
     }
 )
 
 CANCEL_SCHEMA = vol.Schema(
     {
-        vol.Optional(ATTR_RECORD_ID): vol.Coerce(int),
+        vol.Optional(ATTR_RECORD_ID): vol.All(vol.Coerce(int), vol.Range(min=0)),
         vol.Optional(ATTR_ENTITY_ID): cv.entity_id,
         vol.Optional(ATTR_SLOT, default="current"): vol.In(SLOTS),
-        vol.Optional(ATTR_CHANNEL_NAME): cv.string,
-        vol.Optional(ATTR_CHANNEL_UUID): cv.string,
+        vol.Optional(ATTR_CHANNEL_NAME): _SHORT,
+        vol.Optional(ATTR_CHANNEL_UUID): _SHORT,
         vol.Optional(ATTR_START): _DATETIME,
-        vol.Optional("config_entry_id"): cv.string,
+        vol.Optional("config_entry_id"): _ENTRY,
     }
 )
 
@@ -253,33 +257,47 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         uuid = channel["uuid"]
 
         records = coordinator.data.records if coordinator.data else []
-        margin_before = call.data.get(CONF_MARGIN_BEFORE, options.get(CONF_MARGIN_BEFORE, DEFAULT_MARGIN_BEFORE))
-        margin_after = call.data.get(CONF_MARGIN_AFTER, options.get(CONF_MARGIN_AFTER, DEFAULT_MARGIN_AFTER))
+        # Les options sont des nombres décimaux (sélecteur) : on travaille en minutes entières
+        margin_before = int(call.data.get(CONF_MARGIN_BEFORE, options.get(CONF_MARGIN_BEFORE, DEFAULT_MARGIN_BEFORE)))
+        margin_after = int(call.data.get(CONF_MARGIN_AFTER, options.get(CONF_MARGIN_AFTER, DEFAULT_MARGIN_AFTER)))
+        margin_before_option = margin_before  # gardée pour la répétition si le 1er épisode a déjà commencé
         quality = call.data.get(CONF_QUALITY, options.get(CONF_QUALITY, DEFAULT_QUALITY))
         channel_name = channel.get("name") or data.get(ATTR_CHANNEL_NAME) or uuid
         program_start = start
 
-        async def _repeat(record_id: Any) -> str | None:
+        async def _repeat(record_id: Any, m_before: int, m_after: int, rep_end: int) -> str | None:
             if not call.data.get(ATTR_REPEAT_WEEKLY):
                 return None
             rule = await coordinator.repeats.async_add(
                 channel_uuid=uuid, channel_name=channel_name, title=str(data[ATTR_TITLE]),
-                subtitle=data.get(ATTR_SUBTITLE), start=program_start, end=end,
-                margin_before=int(margin_before), margin_after=int(margin_after), quality=quality,
+                subtitle=data.get(ATTR_SUBTITLE), start=program_start, end=rep_end,
+                margin_before=int(m_before), margin_after=int(m_after), quality=quality,
                 first_record_id=record_id,
             )
-            await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état  # programme la semaine suivante
+            await coordinator.async_refresh()  # immédiat : programme la semaine suivante et met la carte à jour
             return rule["id"]
 
         existing = find_record_for_program(records, uuid, start, end)
         if existing:
-            if call.data.get(ATTR_END_TIME) is not None or call.data.get(ATTR_END) not in (None, ""):
-                # Programme déjà enregistré mais nouvelle heure de fin : on met à jour la fin
+            if call.data.get(ATTR_END_TIME) is not None:
+                # Programme déjà enregistré mais nouvelle heure de fin choisie : on met à jour la fin.
+                # (Les horaires du guide seuls ne changent rien : la fin choisie à la création est gardée.)
                 new_end = int(end + int(margin_after) * 60)
                 if new_end != existing.get("end"):
                     await _guard(coordinator.client.update_record_end(existing, new_end))
                     await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
-            repeat_id = await _repeat(existing.get("id"))
+                    existing = {**existing, "end": new_end}
+            # La répétition reprend les horaires réels de cet enregistrement (marges et fin choisies comprises),
+            # sauf si des marges sont données dans l'appel.
+            rep_end, m_before, m_after = end, margin_before, margin_after
+            if CONF_MARGIN_BEFORE not in call.data and isinstance(existing.get("start"), int):
+                m_before = min(60, max(0, round((start - existing["start"]) / 60)))
+            if CONF_MARGIN_AFTER not in call.data and isinstance(existing.get("end"), int):
+                extra = max(0, round((existing["end"] - end) / 60))
+                if extra > 120:  # fin très repoussée : elle fait partie de la durée
+                    rep_end, extra = existing["end"], 0
+                m_after = extra
+            repeat_id = await _repeat(existing.get("id"), m_before, m_after, rep_end)
             return {"record_id": existing.get("id"), "already_programmed": True, "channel_uuid": uuid, ATTR_REPEAT_ID: repeat_id}
 
         # Programme déjà commencé (ou marge dans le passé) : on démarre maintenant.
@@ -298,7 +316,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             quality=quality,
         )
         result = await _guard(coordinator.client.create_record(request))
-        repeat_id = await _repeat(result.get("id"))
+        repeat_id = await _repeat(result.get("id"), margin_before_option, int(margin_after), end)
         await coordinator.async_refresh()  # immédiat : la carte affiche le nouvel état
         return {
             ATTR_REPEAT_ID: repeat_id,
@@ -434,8 +452,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.services.async_register(
         DOMAIN, SERVICE_CANCEL, async_cancel, schema=CANCEL_SCHEMA, supports_response=SupportsResponse.OPTIONAL
     )
-    record_id_schema = vol.Schema({vol.Required(ATTR_RECORD_ID): vol.Coerce(int), vol.Optional("config_entry_id"): cv.string})
-    repeat_id_schema = vol.Schema({vol.Required(ATTR_REPEAT_ID): cv.string, vol.Optional("config_entry_id"): cv.string})
+    record_id_schema = vol.Schema({vol.Required(ATTR_RECORD_ID): vol.All(vol.Coerce(int), vol.Range(min=0)), vol.Optional("config_entry_id"): _ENTRY})
+    repeat_id_schema = vol.Schema({vol.Required(ATTR_REPEAT_ID): _SHORT, vol.Optional("config_entry_id"): _ENTRY})
     for name, handler, schema in (
         (SERVICE_PAUSE_RECORD, async_pause_record, record_id_schema),
         (SERVICE_RESUME_RECORD, async_resume_record, record_id_schema),
@@ -451,10 +469,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         async_stop_repeat,
         schema=vol.Schema(
             {
-                vol.Required(ATTR_REPEAT_ID): cv.string,
+                vol.Required(ATTR_REPEAT_ID): _SHORT,
                 vol.Optional("cancel_scheduled", default=False): cv.boolean,
                 vol.Optional("keep_record_id"): vol.Coerce(int),
-                vol.Optional("config_entry_id"): cv.string,
+                vol.Optional("config_entry_id"): _ENTRY,
             }
         ),
         supports_response=SupportsResponse.OPTIONAL,
@@ -463,7 +481,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         DOMAIN,
         SERVICE_REFRESH_CHANNELS,
         async_refresh_channels,
-        schema=vol.Schema({vol.Optional("config_entry_id"): cv.string}),
+        schema=vol.Schema({vol.Optional("config_entry_id"): _ENTRY}),
     )
     return True
 
@@ -475,11 +493,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: FreeboxPvrConfigEntry) -
     )
     if not await hass.async_add_executor_job(client.token_file.exists):
         # Sans jeton, open() relancerait une demande d'autorisation sur l'écran de la box.
-        raise ConfigEntryNotReady("Jeton d'application Freebox introuvable, reconfigurez l'intégration")
+        raise ConfigEntryNotReady(translation_domain=DOMAIN, translation_key="token_missing")
     try:
         await client.open()
-    except Exception as err:
-        raise ConfigEntryNotReady(f"Connexion à la Freebox impossible : {err}") from err
+    except Exception as err:  # noqa: BLE001 — box injoignable au démarrage : Home Assistant réessaie
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN, translation_key="api_error", translation_placeholders={"error": str(err) or repr(err)}
+        ) from err
 
     coordinator = FreeboxPvrCoordinator(hass, entry, client)
     await coordinator.repeats.async_load()
@@ -511,7 +531,6 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Supprime le jeton local (l'appli reste à révoquer dans Freebox OS)."""
     path = token_path(hass, entry.data[CONF_HOST])
     await hass.async_add_executor_job(lambda: path.unlink(missing_ok=True))
-    from homeassistant.helpers.storage import Store
-
+    ir.async_delete_issue(hass, DOMAIN, f"permission_missing_{entry.entry_id}")
     await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.repeats").async_remove()
     await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.posters").async_remove()

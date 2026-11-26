@@ -336,6 +336,15 @@
     },
     "api_error": {
       "message": "Freebox error: {error}"
+    },
+    "token_missing": {
+      "message": "Freebox app token not found: remove and add the integration again."
+    }
+  },
+  "issues": {
+    "permission_missing": {
+      "title": "Freebox PVR: TV recording permission removed",
+      "description": "The Freebox ({host}) refuses access to TV recordings for the « Home Assistant - Freebox PVR » app.\n\nIn Freebox OS, open Freebox settings > Access management > Applications tab, edit « Home Assistant - Freebox PVR » and tick the **TV recordings (PVR)** permission.\n\nNo need to reconfigure anything: the integration starts again by itself within a few minutes and this message disappears."
     }
   }
 }

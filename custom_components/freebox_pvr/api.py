@@ -12,6 +12,7 @@ import re
 from typing import Any
 import unicodedata
 
+import aiohttp
 from freebox_api import Freepybox
 from freebox_api.exceptions import (
     AuthorizationError,
@@ -265,9 +266,9 @@ class FreeboxPvrClient:
             raise PermissionMissing(str(err)) from err
         except (HttpRequestError, AuthorizationError) as err:
             raise FreeboxPvrError(str(err)) from err
-
-    async def get_permissions(self) -> dict[str, bool]:
-        return await self.fbx.get_permissions() or {}
+        except (aiohttp.ClientError, TimeoutError, OSError) as err:
+            # Box injoignable (réseau, TLS, délai dépassé) : même erreur que les autres pour les actions
+            raise FreeboxPvrError(f"Freebox injoignable : {err or type(err).__name__}") from err
 
     async def get_channels(self) -> dict[str, dict[str, Any]]:
         data = await self._call(self.fbx.tv.get_tv_channels())

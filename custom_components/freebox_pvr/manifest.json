@@ -1,6 +1,9 @@
 {
   "domain": "freebox_pvr",
   "name": "Freebox PVR",
+  "categories": [
+    "media_entertainment.tv_streaming"
+  ],
   "codeowners": [
     "@JeromeRoseau"
   ],
@@ -19,5 +22,5 @@
   "requirements": [
     "freebox-api>=1.1.0"
   ],
-  "version": "2026.11.11"
+  "version": "2026.11.12"
 }

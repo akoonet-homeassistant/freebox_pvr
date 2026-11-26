@@ -9,6 +9,7 @@ from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
@@ -46,6 +47,7 @@ class FreeboxPvrCoordinator(DataUpdateCoordinator[PvrData]):
         self.posters = PosterMemory(hass, entry.entry_id)
         self._channels: dict[str, dict[str, Any]] = {}
         self._channels_at: datetime | None = None
+        self._issue_id = f"permission_missing_{entry.entry_id}"
 
     async def async_refresh_channels(self) -> None:
         self._channels = await self.client.get_channels()
@@ -66,13 +68,23 @@ class FreeboxPvrCoordinator(DataUpdateCoordinator[PvrData]):
             if self.repeats.rules and await async_check_guide(self.hass, self, records):
                 records = await self.client.get_records()
         except PermissionMissing as err:
-            raise UpdateFailed(
-                "Droit « Enregistrements TV (PVR) » manquant pour l'application sur la Freebox"
-            ) from err
+            # Droit retiré dans Freebox OS : alerte dans Réparations ; la mise à jour reprend seule
+            # dès que le droit est rendu (pas besoin de reconfigurer l'intégration).
+            ir.async_create_issue(
+                self.hass, DOMAIN, self._issue_id, is_fixable=False, severity=ir.IssueSeverity.ERROR,
+                translation_key="permission_missing",
+                translation_placeholders={"host": self.client.host},
+            )
+            raise UpdateFailed(translation_domain=DOMAIN, translation_key="permission_missing") from err
         except FreeboxPvrError as err:
-            raise UpdateFailed(str(err)) from err
-        except Exception as err:  # réseau, TLS…
-            raise UpdateFailed(f"Freebox injoignable : {err}") from err
+            raise UpdateFailed(
+                translation_domain=DOMAIN, translation_key="api_error", translation_placeholders={"error": str(err)}
+            ) from err
+        except Exception as err:  # noqa: BLE001 — imprévu : la mise à jour échoue sans planter
+            raise UpdateFailed(
+                translation_domain=DOMAIN, translation_key="api_error", translation_placeholders={"error": repr(err)}
+            ) from err
+        ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
         records.sort(key=lambda r: r.get("start", 0))
         # Affiches : retenues tant que le programme est dans le guide du jour
         try:

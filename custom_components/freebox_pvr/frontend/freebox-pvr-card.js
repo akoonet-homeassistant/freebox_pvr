@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.11";
+const VERSION_CARTE = "2026.11.12";
 
 const TEXTES = {
   fr: {
@@ -329,11 +329,16 @@ class FreeboxPvrCard extends HTMLElement {
     if (repeats.length) {
       html += `<div class="section">${esc(t.repetitions)}</div>` + repeats.map((rp) => {
         const jour = rp.next_start_ts ? jourSemaine(rp.next_start_ts, this._hass) : "";
-        const fin = (() => { const [h, m] = rp.time.split(":").map(Number); const x = (h * 60 + m + rp.duration) % 1440; return `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`; })();
+        const fin = (() => {  // heure de fin de la répétition ; rien si la règle est incomplète
+          const [h, m] = String(rp.time || "").split(":").map(Number); const d = Number(rp.duration);
+          if (!Number.isFinite(h) || !Number.isFinite(m) || !Number.isFinite(d)) return "";
+          const x = (((h * 60 + m + d) % 1440) + 1440) % 1440;
+          return `${String(Math.floor(x / 60)).padStart(2, "0")}:${String(x % 60).padStart(2, "0")}`;
+        })();
         const boutons = (rp.paused ? this._btn("resume_repeat", rp.id, rp.title, "mdi:play") : this._btn("pause_repeat", rp.id, rp.title, "mdi:pause"))
           + this._btn("stop_repeat", rp.id, rp.title, "mdi:repeat-off", true);
         return `<div class="enr ${rp.paused ? "en-pause" : ""}"><div class="info">
-            <div class="ligne1"><span class="cren">${esc(rp.channel_name)}</span><span class="heure">↻ ${esc(jour)} ${esc(rp.time)} – ${esc(fin)}</span>${rp.paused ? `<span class="badge">${esc(t.en_pause)}</span>` : ""}</div>
+            <div class="ligne1"><span class="cren">${esc(rp.channel_name)}</span><span class="heure">↻ ${esc(jour)} ${esc(rp.time)}${fin ? ` – ${esc(fin)}` : ""}</span>${rp.paused ? `<span class="badge">${esc(t.en_pause)}</span>` : ""}</div>
             <div class="titre">${esc(rp.title)}</div></div><div class="actions">${boutons}</div></div>`;
       }).join("");
     }
