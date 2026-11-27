@@ -31,10 +31,12 @@
           "margin_before": "Margin before (min)",
           "margin_after": "Margin after (min)",
           "quality": "Quality",
+          "adjust_repeats": "Adjust weekly repeats from the guide",
           "notify_services": "Notify these devices",
           "channel_aliases": "Channel matches"
         },
         "data_description": {
+          "adjust_repeats": "On the day of a weekly repeat, if the guide shows the same title, the scheduled recording is changed on the Freebox to follow a time shift and get the episode subtitle. When off, nothing is changed: the episode is recorded at the usual time.",
           "notify_services": "When the guide lists a different program on the slot of a weekly repeat, a notification with Cancel / Keep buttons is sent to these devices (always also shown in Home Assistant).",
           "channel_aliases": "One per line: Guide name = Freebox name (or uuid-webtv-…). Only needed if a channel is not found automatically."
         }

@@ -1,7 +1,7 @@
 /* Freebox PVR — carte du tableau de bord : guide Programme TNT FR + enregistrement sur la Freebox.
    Chargée sur toutes les pages par l'intégration (aucune ressource Lovelace à ajouter). */
 
-const VERSION_CARTE = "2026.11.13";
+const VERSION_CARTE = "2026.11.14";
 
 const TEXTES = {
   fr: {
@@ -111,6 +111,46 @@ function journeeDiffusion(decalage = 0) {
   d.setHours(12, 0, 0, 0);
   d.setDate(d.getDate() + decalage);
   return d;
+}
+
+/**
+ * Met à jour `vieux` (dans la page) pour qu'il devienne identique à `neuf`, en gardant les éléments
+ * qui existent déjà. Un carrousel reste ainsi le même élément d'un rendu à l'autre et garde sa
+ * position de défilement (sur iPhone, un carrousel recréé repartait au début), et le champ actif
+ * garde le focus.
+ */
+function fusionner(vieux, neuf) {
+  if (vieux.nodeType !== neuf.nodeType || vieux.nodeName !== neuf.nodeName
+      || (vieux.nodeType === 1 && (vieux.getAttribute("data-rail-id") || "") !== (neuf.getAttribute("data-rail-id") || ""))) {
+    vieux.replaceWith(neuf);
+    return;
+  }
+  if (vieux.nodeType !== 1) {
+    if (vieux.nodeValue !== neuf.nodeValue) vieux.nodeValue = neuf.nodeValue;
+    return;
+  }
+  // Éléments de Home Assistant (ha-card, ha-icon…) : ils ajoutent eux-mêmes des attributs et du contenu,
+  // qu'on laisse en place ; seuls nos attributs et nos enfants sont mis à jour.
+  const perso = vieux.nodeName.includes("-");
+  if (!perso) for (const a of [...vieux.attributes]) if (!neuf.hasAttribute(a.name)) vieux.removeAttribute(a.name);
+  for (const a of [...neuf.attributes]) if (vieux.getAttribute(a.name) !== a.value) vieux.setAttribute(a.name, a.value);
+  if (vieux.nodeName === "INPUT" && neuf.hasAttribute("value") && vieux.value !== neuf.getAttribute("value")) vieux.value = neuf.getAttribute("value");
+  if (perso && !neuf.hasChildNodes()) return;
+  fusionnerEnfants(vieux, neuf);
+}
+
+function fusionnerEnfants(vieux, neuf) {
+  const anciens = [...vieux.childNodes], nouveaux = [...neuf.childNodes];
+  nouveaux.forEach((n, i) => { if (anciens[i]) fusionner(anciens[i], n); else vieux.appendChild(n); });
+  for (let i = nouveaux.length; i < anciens.length; i++) anciens[i].remove();
+}
+
+/** Ajoute un écouteur une seule fois par élément (les éléments gardés d'un rendu à l'autre l'ont déjà). */
+function lier(el, type, fn, opts) {
+  const marque = `__fbx_${type}`;
+  if (el[marque]) return;
+  el[marque] = true;
+  el.addEventListener(type, fn, opts);
 }
 
 /** 1re et 2e partie de soirée d'une liste de programmes, comme Programme TNT FR les calcule. */
@@ -699,34 +739,43 @@ class FreeboxPvrCard extends HTMLElement {
     const contenu = `${this._config.vues.length > 1 ? `<div class="onglets">${onglets}</div>` : ""}
         ${soir ? this._barreDate() : ""}
         <div class="${carrousel ? "carrousels" : "liste"}">${corps}</div>`;
-    this.shadowRoot.innerHTML = `<style>${STYLE}${STYLE_SURCOUCHE}${STYLE_CARROUSEL}</style>` + (this._config.integre
+    const modele = document.createElement("template");
+    modele.innerHTML = `<style>${STYLE}${STYLE_SURCOUCHE}${STYLE_CARROUSEL}</style>` + (this._config.integre
       ? `<div class="integre">${contenu}</div>`
       : `<ha-card>
         <div class="entete"><div class="titre-carte"><ha-icon icon="${seulEnr ? "mdi:record-rec" : "mdi:television-classic"}"></ha-icon>${esc(this._config.title || (seulEnr ? t.titre_enr : t.titre))}</div></div>
         ${contenu}
       </ha-card>`);
-    this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => { if (defil[r.dataset.railId]) r.scrollLeft = defil[r.dataset.railId]; });
-    this.shadowRoot.querySelectorAll(".fleche").forEach((b) => b.addEventListener("click", () => {
+    // Mise à jour de ce qui change seulement : les carrousels restent les mêmes éléments
+    fusionnerEnfants(this.shadowRoot, modele.content);
+    // Secours (carrousel recréé, par exemple après un changement d'onglet) : on remet la position, sans « aimantation »
+    this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => {
+      const x = defil[r.dataset.railId];
+      if (!x || Math.abs(r.scrollLeft - x) < 2) return;
+      r.style.scrollSnapType = "none"; r.scrollLeft = x;
+      requestAnimationFrame(() => { r.scrollLeft = x; requestAnimationFrame(() => { r.style.scrollSnapType = ""; }); });
+    });
+    this.shadowRoot.querySelectorAll(".fleche").forEach((b) => lier(b, "click", () => {
       const rail = this.shadowRoot.querySelector(`[data-rail-id="${b.dataset.rail}"]`);
       if (rail) rail.scrollBy({ left: Number(b.dataset.sens) * rail.clientWidth, behavior: "smooth" });
     }));
-    this.shadowRoot.querySelectorAll(".jaq img").forEach((img) => img.addEventListener("error", () => { img.remove(); }, { once: true }));
+    this.shadowRoot.querySelectorAll(".jaq img").forEach((img) => lier(img, "error", () => { img.remove(); }, { once: true }));
     // Flèches masquées quand tout tient dans la largeur
     const majFleches = (r) => {
       const g = r.parentElement.querySelector(".fleche.g"), d = r.parentElement.querySelector(".fleche.d");
       if (g) g.hidden = r.scrollLeft <= 2;
       if (d) d.hidden = r.scrollLeft + r.clientWidth >= r.scrollWidth - 2;
     };
-    this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => r.addEventListener("scroll", () => majFleches(r), { passive: true }));
+    this.shadowRoot.querySelectorAll("[data-rail-id]").forEach((r) => lier(r, "scroll", () => majFleches(r), { passive: true }));
     requestAnimationFrame(() => this.shadowRoot.querySelectorAll("[data-rail-id]").forEach(majFleches));
 
-    this.shadowRoot.querySelectorAll(".logo img").forEach((img) => img.addEventListener("error", () => {
+    this.shadowRoot.querySelectorAll(".logo img").forEach((img) => lier(img, "error", () => {
       const s = document.createElement("span"); s.textContent = img.dataset.initiales || "?"; img.replaceWith(s);
     }, { once: true }));
-    this.shadowRoot.querySelectorAll("[data-onglet]").forEach((b) => b.addEventListener("click", () => {
+    this.shadowRoot.querySelectorAll("[data-onglet]").forEach((b) => lier(b, "click", () => {
       this._onglet = b.dataset.onglet; this._confirmer = null; this._signature = ""; this._rendu();
     }));
-    this.shadowRoot.querySelectorAll("[data-action]").forEach((el) => el.addEventListener("click", (ev) => {
+    this.shadowRoot.querySelectorAll("[data-action]").forEach((el) => lier(el, "click", (ev) => {
       ev.stopPropagation();
       const action = el.dataset.action, cle = el.dataset.cle;
       const conteneur = el.closest(".action");
@@ -756,21 +805,21 @@ class FreeboxPvrCard extends HTMLElement {
         this._tousFinis = true; this._signature = ""; this._rendu();
       }
     }));
-    // Choix du soir
+    // Choix du soir (les écouteurs lisent l'état au moment du clic : ils restent valables d'un rendu à l'autre)
     const changerJour = (n) => {
       const j = Math.max(0, Math.min(JOURS_MAX, n));
       if (j === this._jour) return;
       this._jour = j; this._choix = null; this._confirmer = null; this._signature = ""; this._rendu();
     };
-    this.shadowRoot.querySelectorAll("[data-jour]").forEach((b) => b.addEventListener("click", () => changerJour(this._jour + Number(b.dataset.jour))));
+    this.shadowRoot.querySelectorAll("[data-jour]").forEach((b) => lier(b, "click", () => changerJour(this._jour + Number(b.dataset.jour))));
     const champDate = this.shadowRoot.querySelector(".date-cachee");
-    if (champDate) champDate.addEventListener("change", () => {
+    if (champDate) lier(champDate, "change", () => {
       if (!champDate.value) return;
       const [y, m, d] = champDate.value.split("-").map(Number);
       const choisi = new Date(y, m - 1, d, 12), base = journeeDiffusion(0);
       changerJour(Math.round((choisi - base) / 86400000));
     });
-    this.shadowRoot.querySelectorAll("[data-sous]").forEach((b) => b.addEventListener("click", () => {
+    this.shadowRoot.querySelectorAll("[data-sous]").forEach((b) => lier(b, "click", () => {
       this._sous = b.dataset.sous; this._confirmer = null; this._signature = ""; this._rendu();
     }));
 

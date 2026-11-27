@@ -22,5 +22,5 @@
   "requirements": [
     "freebox-api>=1.1.0"
   ],
-  "version": "2026.11.13"
+  "version": "2026.11.14"
 }

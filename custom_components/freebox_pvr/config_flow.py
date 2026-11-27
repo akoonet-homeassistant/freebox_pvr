@@ -16,12 +16,14 @@ from freebox_api.exceptions import AuthorizationError
 
 from .api import FreeboxPvrClient, FreeboxPvrError, PermissionMissing
 from .const import (
+    CONF_ADJUST_REPEATS,
     CONF_CHANNEL_ALIASES,
     CONF_NOTIFY,
     CONF_MARGIN_AFTER,
     CONF_MARGIN_BEFORE,
     CONF_QUALITY,
     DEFAULT_HOST,
+    DEFAULT_ADJUST_REPEATS,
     DEFAULT_MARGIN_AFTER,
     DEFAULT_MARGIN_BEFORE,
     DEFAULT_PORT,
@@ -129,6 +131,9 @@ class FreeboxPvrOptionsFlow(OptionsFlow):
                 vol.Required(CONF_QUALITY, default=opts.get(CONF_QUALITY, DEFAULT_QUALITY)): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=QUALITIES, translation_key="quality", mode=selector.SelectSelectorMode.DROPDOWN)
                 ),
+                vol.Required(
+                    CONF_ADJUST_REPEATS, default=opts.get(CONF_ADJUST_REPEATS, DEFAULT_ADJUST_REPEATS)
+                ): selector.BooleanSelector(),
                 vol.Optional(CONF_NOTIFY, default=[s for s in opts.get(CONF_NOTIFY, []) if s in notify_services]): selector.SelectSelector(
                     selector.SelectSelectorConfig(options=notify_services, multiple=True, mode=selector.SelectSelectorMode.LIST)
                 ),

@@ -19,7 +19,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .api import ChannelNotFound, FreeboxPvrError, find_channel, parse_aliases
-from .const import CONF_CHANNEL_ALIASES, CONF_NOTIFY, DOMAIN, GUIDE_DOMAIN, SLOTS
+from .const import CONF_ADJUST_REPEATS, CONF_CHANNEL_ALIASES, CONF_NOTIFY, DEFAULT_ADJUST_REPEATS, DOMAIN, GUIDE_DOMAIN, SLOTS
 from .repeat import match_guide_program, occurrences, same_title
 
 if TYPE_CHECKING:
@@ -88,6 +88,7 @@ async def async_check_guide(hass: HomeAssistant, coordinator: FreeboxPvrCoordina
         return False
     now = dt_util.utcnow()
     now_ts = int(now.timestamp())
+    adjust = coordinator.config_entry.options.get(CONF_ADJUST_REPEATS, DEFAULT_ADJUST_REPEATS)
     by_id = {r.get("id"): r for r in records}
     modified = save = False
     for rule in repeats.rules:
@@ -103,6 +104,8 @@ async def async_check_guide(hass: HomeAssistant, coordinator: FreeboxPvrCoordina
             if prog is None:
                 continue
             if same_title(prog.get("title"), rule["title"]):
+                if not adjust:
+                    continue  # option désactivée : aucun enregistrement modifié sans demande
                 shift = prog["_start"] - occ_start
                 new_start = max(occ_start + shift - rule["margin_before"] * 60, now_ts + 60)
                 new_end = occ_end + shift + rule["margin_after"] * 60

@@ -6,7 +6,7 @@
 
 [![Release](https://img.shields.io/github/v/release/akoonet-homeassistant/freebox_pvr)](https://github.com/akoonet-homeassistant/freebox_pvr/releases)
 [![License](https://img.shields.io/github/license/akoonet-homeassistant/freebox_pvr)](LICENSE)
-[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
+[![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://hacs.xyz)
 
 ![Freebox PVR dans la carte Programme TNT FR](docs/screenshots/fiche_enregistrer.png)
 
@@ -29,7 +29,7 @@ Freebox PVR programme des **enregistrements TV sur votre Freebox** depuis Home A
 - **Recherche de la chaîne** à partir du nom du guide (accents, « + », « HD »… gérés), avec des **correspondances manuelles** si besoin.
 - **Marges** avant et après réglables dans les options, et modifiables ou désactivables à chaque enregistrement, **qualité** au choix (automatique, HD, SD, basse définition), modifiables pour chaque enregistrement.
 - **Heure de fin modifiable** au moment d'enregistrer : si elle est avant l'heure de début, c'est le lendemain (23:30 → 00:45).
-- **Répéter chaque semaine** : même chaîne, même jour, même horaire ; chaque semaine, l'enregistrement suivant est programmé sur la Freebox. Une occurrence annulée n'est pas recréée. Le jour de la diffusion, le guide est vérifié : même titre → sous-titre de l'épisode et horaire mis à jour ; titre différent → notification pour décider (Annuler / Garder).
+- **Répéter chaque semaine** : même chaîne, même jour, même horaire ; chaque semaine, l'enregistrement suivant est programmé sur la Freebox. Une occurrence annulée n'est pas recréée. Le jour de la diffusion, le guide est vérifié : titre différent → notification pour décider (Annuler / Garder) ; même titre → sous-titre de l'épisode et horaire mis à jour (option *Ajuster les répétitions d'après le guide*, activée par défaut).
 - **Pas de doublon** : un 2e appel pour le même programme renvoie l'enregistrement existant.
 - **Programme déjà commencé** : l'enregistrement démarre tout de suite.
 - **Gérer les enregistrements** : consulter les enregistrements à venir et ceux déjà enregistrés sur le disque ; mettre en pause / reprendre un enregistrement ou une répétition ; arrêter un enregistrement en cours ; annuler ; supprimer un enregistrement terminé.
@@ -75,6 +75,7 @@ Le bouton **Configurer** de l'intégration donne accès aux options :
 | Marge avant | 5 min | Minutes enregistrées avant le début |
 | Marge après | 10 min | Minutes enregistrées après la fin |
 | Qualité | Automatique | Automatique, HD, SD ou basse définition |
+| Ajuster les répétitions d'après le guide | activé | Le jour d'une répétition, si le guide annonce le même titre, modifie l'enregistrement programmé sur la Freebox (décalage d'horaire, sous-titre de l'épisode). Désactivé, l'intégration ne modifie jamais un enregistrement sans que vous le demandiez |
 | Prévenir ces appareils | aucun | Téléphones (application mobile) qui reçoivent l'alerte « programme différent » d'une répétition, avec les boutons Annuler / Garder. L'alerte s'affiche toujours aussi dans Home Assistant |
 | Correspondances de chaînes | vide | Une par ligne : `Nom du guide = Nom Freebox` (ou `uuid-webtv-…`). Seulement si une chaîne n'est pas trouvée |
 
@@ -251,8 +252,7 @@ Les identifiants exacts dépendent de la langue de Home Assistant au moment de l
 
 - L'API PVR de Freebox OS peut évoluer sans préavis (Free la considère comme instable).
 - Seule la Freebox Revolution a été testée.
-- **Répétition** : gérée par l'intégration et non par la Freebox (l'API de répétition native de Free n'est pas documentée). L'enregistrement de la semaine suivante est programmé jusqu'à 8 jours à l'avance, à chaque mise à jour (toutes les 5 minutes) : Home Assistant doit tourner au moins une fois dans la semaine. Le jour de la diffusion (dans les 24 h), l'intégration compare chaque enregistrement répété au guide Programme TNT FR : si le même titre est annoncé, elle met à jour le sous-titre de l'épisode et, si l'émission est décalée (jusqu'à 1 h 30), l'horaire ; si un autre programme est annoncé, elle envoie une notification (une seule par semaine) avec « Annuler cet enregistrement » / « Garder ». Sans réponse, l'enregistrement est gardé. Avant ce jour-là, le guide n'est pas encore connu : l'épisode suivant est programmé sur le créneau habituel, sans sous-titre. Les répétitions sont enregistrées dans `.storage/freebox_pvr.<id>.repeats`.
-- **Modifier un enregistrement déjà programmé** (fin, mise en pause / reprise, arrêt en cours, ou sous-titre et horaire mis à jour par le guide) utilise l'API de modification de la Freebox, qui n'a pas encore été testée sur une vraie box.
+- **Répétition** : gérée par l'intégration et non par la Freebox (l'API de répétition native de Free n'est pas documentée). L'enregistrement de la semaine suivante est programmé jusqu'à 8 jours à l'avance, à chaque mise à jour (toutes les 5 minutes) : Home Assistant doit tourner au moins une fois dans la semaine. Le jour de la diffusion (dans les 24 h), l'intégration compare chaque enregistrement répété au guide Programme TNT FR : si le même titre est annoncé et que l'option *Ajuster les répétitions d'après le guide* est activée (par défaut), elle met à jour le sous-titre de l'épisode et, si l'émission est décalée (jusqu'à 1 h 30), l'horaire (sinon, rien ne change) ; si un autre programme est annoncé, elle envoie une notification (une seule par semaine) avec « Annuler cet enregistrement » / « Garder ». Sans réponse, l'enregistrement est gardé. Avant ce jour-là, le guide n'est pas encore connu : l'épisode suivant est programmé sur le créneau habituel, sans sous-titre. Les répétitions sont enregistrées dans `.storage/freebox_pvr.<id>.repeats`.
 - Le Freebox Server doit avoir un disque pour les enregistrements.
 - Les conflits (deux enregistrements en même temps) sont signalés par la Freebox dans l'attribut `conflict`, pas résolus par l'intégration.
 
@@ -277,7 +277,7 @@ Freebox PVR schedules **TV recordings on your Freebox** from Home Assistant. It 
 - **Channel lookup** from the guide name (accents, "+", "HD"… handled), with **manual matches** when needed.
 - **Margins** before and after set in the options, and adjustable or turned off for each recording, selectable **quality** (automatic, HD, SD, low definition), overridable per recording.
 - **Adjustable end time** when recording: if it is earlier than the start time, it is the next day (23:30 → 00:45).
-- **Repeat every week**: same channel, same day, same time slot; every week, the next recording is scheduled on the Freebox. A cancelled occurrence is not recreated. On broadcast day, the guide is checked: same title → episode subtitle and time updated; different title → notification to decide (Cancel / Keep).
+- **Repeat every week**: same channel, same day, same time slot; every week, the next recording is scheduled on the Freebox. A cancelled occurrence is not recreated. On broadcast day, the guide is checked: different title → notification to decide (Cancel / Keep); same title → episode subtitle and time updated (*Adjust weekly repeats from the guide* option, on by default).
 - **No duplicates**: a second call for the same program returns the existing recording.
 - **Program already started**: recording starts right away.
 - **Manage recordings**: view upcoming recordings and those already recorded on the disk; pause / resume a recording or a repeat; stop a recording in progress; cancel; delete a finished recording.
@@ -323,6 +323,7 @@ The integration's **Configure** button opens the options:
 | Margin before | 5 min | Minutes recorded before the start |
 | Margin after | 10 min | Minutes recorded after the end |
 | Quality | Automatic | Automatic, HD, SD or low definition |
+| Adjust weekly repeats from the guide | on | On the day of a repeat, if the guide lists the same title, changes the scheduled recording on the Freebox (time shift, episode subtitle). When off, the integration never changes a recording without you asking |
 | Notify these devices | none | Phones (mobile app) that receive the "different program" alert of a repeat, with Cancel / Keep buttons. The alert is always also shown in Home Assistant |
 | Channel matches | empty | One per line: `Guide name = Freebox name` (or `uuid-webtv-…`). Only if a channel is not found |
 
@@ -476,7 +477,6 @@ Exact entity IDs depend on the Home Assistant language at installation time, and
 
 - The Freebox OS PVR API may change without notice (Free considers it unstable).
 - Only the Freebox Revolution has been tested.
-- **Repeat**: handled by the integration, not by the Freebox (Free's native repeat API is not documented). The next week's recording is scheduled up to 8 days ahead, at every update (every 5 minutes): Home Assistant must run at least once a week. On broadcast day (within 24 hours), the integration compares each repeated recording with the Programme TNT FR guide: if the same title is listed, it updates the episode subtitle and, if the show is shifted (up to 1.5 hours), the time; if another program is listed, it sends a notification (once a week) with "Cancel this recording" / "Keep". Without an answer, the recording is kept. Before that day the guide is not known yet: the next episode is scheduled on the usual slot, without subtitle. Repeats are stored in `.storage/freebox_pvr.<id>.repeats`.
-- **Changing an already scheduled recording** (end time, pause / resume, stop while recording, or subtitle and time updated from the guide) uses the Freebox edit API, not yet tested on a real box.
+- **Repeat**: handled by the integration, not by the Freebox (Free's native repeat API is not documented). The next week's recording is scheduled up to 8 days ahead, at every update (every 5 minutes): Home Assistant must run at least once a week. On broadcast day (within 24 hours), the integration compares each repeated recording with the Programme TNT FR guide: if the same title is listed and the *Adjust weekly repeats from the guide* option is on (default), it updates the episode subtitle and, if the show is shifted (up to 1.5 hours), the time (otherwise nothing changes); if another program is listed, it sends a notification (once a week) with "Cancel this recording" / "Keep". Without an answer, the recording is kept. Before that day the guide is not known yet: the next episode is scheduled on the usual slot, without subtitle. Repeats are stored in `.storage/freebox_pvr.<id>.repeats`.
 - The Freebox Server needs a disk for recordings.
 - Conflicts (two recordings at the same time) are reported by the Freebox in the `conflict` attribute, not resolved by the integration.
